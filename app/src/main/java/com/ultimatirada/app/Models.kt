@@ -105,7 +105,10 @@ data class ApiYouTubeVideo(
     val id: String,
     val title: String,
     val published: String? = null,
-)
+) {
+    val watchUrl: String get() = "https://www.youtube.com/watch?v=$id"
+    val thumbnailUrl: String get() = "https://img.youtube.com/vi/$id/hqdefault.jpg"
+}
 
 @Serializable
 data class ApiStats(

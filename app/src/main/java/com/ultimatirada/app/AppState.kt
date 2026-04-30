@@ -126,6 +126,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun refreshHomeData() {
+        viewModelScope.launch {
+            val productsTask = async { loadProductsInternal() }
+            val eventsTask = async { loadEventsInternal() }
+            val rankingTask = async { loadRankingInternal() }
+            val videosTask = async { runCatching { api.fetchYouTubeVideos() } }
+            val statsTask = async { runCatching { api.fetchStats() } }
+
+            val products = productsTask.await()
+            val events = eventsTask.await()
+            val ranking = rankingTask.await()
+            val videos = videosTask.await()
+            val stats = statsTask.await()
+
+            _uiState.update { state ->
+                state.copy(
+                    products = products.getOrDefault(state.products),
+                    events = events.getOrDefault(state.events),
+                    ranking = ranking.getOrDefault(state.ranking),
+                    youtubeVideos = videos.getOrDefault(state.youtubeVideos),
+                    stats = stats.getOrDefault(state.stats),
+                    hasLoadedOnce = state.hasLoadedOnce || products.isSuccess || events.isSuccess || ranking.isSuccess,
+                )
+            }
+        }
+    }
+
     fun loadProducts() = viewModelScope.launch { loadProductsInternal().onSuccess { data -> _uiState.update { it.copy(products = data) } } }
     fun loadEvents() = viewModelScope.launch { loadEventsInternal().onSuccess { data -> _uiState.update { it.copy(events = data) } } }
     fun loadRanking() = viewModelScope.launch { loadRankingInternal().onSuccess { data -> _uiState.update { it.copy(ranking = data) } } }
@@ -169,6 +196,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .onFailure { onResult(it.message ?: "No se pudo apuntarte") }
     }
 
+    fun fetchEventDetail(eventId: Int, onResult: (ApiEvent?) -> Unit) = viewModelScope.launch {
+        runCatching { api.fetchEvent(eventId) }
+            .onSuccess { onResult(it) }
+            .onFailure { onResult(null) }
+    }
+
     fun submitSellRequest(
         cardName: String?,
         collection: String?,
@@ -179,6 +212,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         preferredContact: String,
         appointmentDate: String,
         appointmentSlotIndex: Int,
+        photoDataUrl: String? = null,
         onResult: (String?) -> Unit,
     ) = viewModelScope.launch {
         runCatching {
@@ -192,9 +226,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 preferredContact,
                 appointmentDate,
                 appointmentSlotIndex,
+                photoDataUrl,
             )
         }.onSuccess { onResult(null) }
             .onFailure { onResult(it.message ?: "No se pudo enviar la solicitud") }
+    }
+
+    fun fetchCardSaleAvailability(date: String, onResult: (ApiCardSaleAvailability?) -> Unit) = viewModelScope.launch {
+        runCatching { api.fetchCardSaleAvailability(date) }
+            .onSuccess { onResult(it) }
+            .onFailure { onResult(null) }
     }
 
     private suspend fun loadProductsInternal() = runCatching { api.fetchProducts() }

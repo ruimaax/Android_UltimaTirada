@@ -6,6 +6,8 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -158,6 +160,7 @@ class ApiClient {
         preferredContact: String,
         appointmentDate: String,
         appointmentSlotIndex: Int,
+        photoDataUrl: String? = null,
     ) {
         if (!bulkList.isNullOrBlank()) {
             submitBulkCardSale(bulkList, contactPhone, contactEmail, preferredContact, appointmentDate, appointmentSlotIndex)
@@ -175,6 +178,9 @@ class ApiClient {
                 if (!condition.isNullOrBlank()) put("card_condition", condition)
                 if (!contactPhone.isNullOrBlank()) put("contact_phone", contactPhone)
                 if (!contactEmail.isNullOrBlank()) put("contact_email", contactEmail)
+                if (!photoDataUrl.isNullOrBlank()) {
+                    put("photo_urls", buildJsonArray { add(photoDataUrl) })
+                }
             },
         )
     }
