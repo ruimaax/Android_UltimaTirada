@@ -69,8 +69,21 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -134,10 +147,11 @@ import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val Background = Color(0xFF070713)
-private val Panel = Color(0xFF111227)
-private val CardColor = Color(0xFF171832)
-private val Border = Color(0xFF2E3156)
+private val Background = Color(0xFF090911)
+private val Panel = Color(0xFF17162B)
+private val CardColor = Color(0xFF0E0E16)
+private val Border = Color(0xFF523895)
+private val Active = Color(0xFF291F57)
 private val Muted = Color(0xFFB8BCE5)
 private val Blue = Color(0xFF4EA8FF)
 private val Purple = Color(0xFF9B6CFF)
@@ -182,12 +196,17 @@ private enum class AppTab(val label: String) {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore) {
     val state by vm.uiState.collectAsState()
     val cartItems by cart.items.collectAsState()
     var splashDone by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(AppTab.Home) }
     var showCart by remember { mutableStateOf(false) }
+    var showProfileMenu by remember { mutableStateOf(false) }
+    var showProfileDetail by remember { mutableStateOf(false) }
+    var showEventsSheet by remember { mutableStateOf(false) }
+    var showRankingSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(1400)
@@ -215,6 +234,7 @@ private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore) {
                             user = state.currentUser,
                             cartCount = cartItems.sumOf { it.quantity },
                             onCartTap = { showCart = true },
+                            onAvatarTap = { if (state.currentUser != null) showProfileMenu = true },
                         )
                     },
                     bottomBar = {
@@ -237,6 +257,25 @@ private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore) {
 
     if (showCart) {
         CartDialog(cart = cart, onDismiss = { showCart = false })
+    }
+    val user = state.currentUser
+    if (showProfileMenu && user != null) {
+        ProfileMenuSheet(
+            user = user,
+            onMiPerfil = { showProfileMenu = false; showProfileDetail = true },
+            onMisEventos = { showProfileMenu = false; showEventsSheet = true },
+            onMiRanking = { showProfileMenu = false; showRankingSheet = true },
+            onDismiss = { showProfileMenu = false },
+        )
+    }
+    if (showProfileDetail && user != null) {
+        UserProfileSheet(user, onDismiss = { showProfileDetail = false })
+    }
+    if (showEventsSheet && user != null) {
+        UserEventsSheet(state, vm, onDismiss = { showEventsSheet = false })
+    }
+    if (showRankingSheet && user != null) {
+        UserRankingSheet(user, state, vm, onDismiss = { showRankingSheet = false })
     }
 }
 
@@ -439,7 +478,7 @@ private fun BrandBackground(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun AppHeader(user: ApiUser?, cartCount: Int, onCartTap: () -> Unit) {
+private fun AppHeader(user: ApiUser?, cartCount: Int, onCartTap: () -> Unit, onAvatarTap: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -462,7 +501,14 @@ private fun AppHeader(user: ApiUser?, cartCount: Int, onCartTap: () -> Unit) {
                 }
             }
         }
-        Avatar(user?.avatarUrl, user?.avatarColor, user?.initial ?: "UT", 54.dp)
+        Box(
+            Modifier
+                .clip(CircleShape)
+                .clickable(onClick = onAvatarTap)
+                .border(2.dp, if (user != null) Purple.copy(alpha = 0.6f) else Color.Transparent, CircleShape),
+        ) {
+            Avatar(user?.avatarUrl, user?.avatarColor, user?.initial ?: "UT", 54.dp)
+        }
     }
 }
 
@@ -505,6 +551,7 @@ private fun AppBottomBar(selected: AppTab, onSelected: (AppTab) -> Unit) {
 @Composable
 private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewModel) {
     var detailEvent by remember { mutableStateOf<ApiEvent?>(null) }
+    var selectedPublicUserId by remember { mutableStateOf<Int?>(null) }
 
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
@@ -519,7 +566,7 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
         }
         state.errorMessage?.let { item { ErrorBanner(it) { vm.loadAll() } } }
         item {
-            HomeSection(title = "Próximos eventos", icon = { Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(34.dp)) }) {
+            HomeSection(title = "Próximos eventos", icon = { Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
                 if (state.upcomingEvents.isEmpty()) {
                     EmptyEventCard()
                 } else {
@@ -528,18 +575,22 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
             }
         }
         item {
-            HomeSection(title = "Productos destacados", icon = { Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(34.dp)) }) {
+            HomeSection(title = "Productos destacados", icon = { Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
                 FeaturedProductsCarousel(products = state.featuredProducts) { onTab(AppTab.Store) }
             }
         }
         item {
-            HomeSection(title = "Nuestro canal", icon = { Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(34.dp)) }) {
+            HomeSection(title = "Nuestro canal", icon = { Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
                 YouTubeCarousel(state.youtubeVideos)
             }
         }
         item {
-            HomeSection(title = "Top jugadores de la comunidad", icon = { Icon(Icons.Default.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(34.dp)) }) {
-                state.topThree.forEachIndexed { index, player -> TopPlayerCard(index + 1, player) }
+            HomeSection(title = "Top jugadores de la comunidad", icon = { Icon(Icons.Default.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.topThree.forEachIndexed { index, player ->
+                        TopPlayerCard(index + 1, player) { selectedPublicUserId = player.id }
+                    }
+                }
             }
         }
     }
@@ -551,6 +602,9 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
             onDismiss = { detailEvent = null },
         )
     }
+    selectedPublicUserId?.let { id ->
+        PublicProfileSheet(userId = id, vm = vm, onDismiss = { selectedPublicUserId = null })
+    }
 }
 
 @Composable
@@ -559,19 +613,29 @@ private fun HeroCard(onEvents: () -> Unit, onStore: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF211B43), Color(0xF0000008))))
-            .border(1.3.dp, DeepPurple, RoundedCornerShape(8.dp))
-            .padding(horizontal = 24.dp, vertical = 42.dp),
+            .background(Brush.linearGradient(
+                listOf(Active.copy(alpha = 0.88f), Background.copy(alpha = 0.94f), Color.Black.copy(alpha = 0.92f)),
+                start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
+            ))
+            .border(1.dp, Border.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 22.dp, vertical = 30.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("B I E N V E N I D O   A", color = Color(0xFFB8B1CC), fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 5.sp)
+        Text(
+            "BIENVENIDO A",
+            color = Muted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 5.sp,
+        )
         Text(
             "ÚLTIMA TIRADA",
             style = TextStyle(
                 brush = Brush.linearGradient(listOf(Blue, Purple)),
                 fontFamily = FontFamily.Serif,
-                fontSize = 39.sp,
+                fontSize = 44.sp,
                 fontWeight = FontWeight.Black,
                 textAlign = TextAlign.Center,
             ),
@@ -580,31 +644,33 @@ private fun HeroCard(onEvents: () -> Unit, onStore: () -> Unit) {
         )
         Text(
             "Tu comunidad oficial de Magic: The Gathering en Ceuta.\nTorneos, eventos, ligas, ranking y tienda online.",
-            color = Color(0xFFB8B1CC),
-            lineHeight = 30.sp,
-            fontSize = 21.sp,
-            fontWeight = FontWeight.Bold,
+            color = Muted,
+            lineHeight = 26.sp,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
+        Spacer(Modifier.height(4.dp))
         Button(
             onClick = onEvents,
-            modifier = Modifier.fillMaxWidth().height(62.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(40.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Purple),
         ) {
-            Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Próximos Eventos", fontSize = 19.sp, fontWeight = FontWeight.Black)
+            Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Próximos Eventos", fontSize = 16.sp, fontWeight = FontWeight.Black)
         }
-        Button(
+        OutlinedButton(
             onClick = onStore,
-            modifier = Modifier.fillMaxWidth().height(62.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(40.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A2D10), contentColor = Gold),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Gold.copy(alpha = 0.6f)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Gold),
         ) {
-            Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Ir a la Tienda", fontSize = 19.sp, fontWeight = FontWeight.Black)
+            Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Ir a la Tienda", fontSize = 16.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -614,15 +680,29 @@ private fun HomeSection(title: String, icon: @Composable () -> Unit, content: @C
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xEE0C0A1A))
-            .border(1.2.dp, DeepPurple.copy(alpha = 0.75f), RoundedCornerShape(8.dp))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(Panel, Active.copy(alpha = 0.22f), Panel),
+                    start = Offset(0f, 0f),
+                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
+                ),
+            )
+            .border(1.dp, Border.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            icon()
-            Text(title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Active),
+                contentAlignment = Alignment.Center,
+            ) {
+                icon()
+            }
+            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.2.sp)
         }
         content()
     }
@@ -632,21 +712,38 @@ private fun HomeSection(title: String, icon: @Composable () -> Unit, content: @C
 private fun HomeEventCard(event: ApiEvent, onClick: () -> Unit) {
     Column(
         Modifier.clickable(onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(210.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .height(160.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(Brush.horizontalGradient(listOf(Color(0xFF5F3BB6), Color(0xFF001025)))),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Groups, null, tint = Color.White, modifier = Modifier.size(92.dp))
+            Icon(Icons.Default.Groups, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(72.dp))
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)))),
+            )
+            Column(
+                Modifier.align(Alignment.BottomStart).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    "${event.dayOfMonth} ${event.monthShort.lowercase().replaceFirstChar { it.uppercase() }} · ${event.time.take(5)}",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(event.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
-        Text("${event.dayOfMonth} ${event.monthShort.lowercase().replaceFirstChar { it.uppercase() }} · ${event.time.take(5)}", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black)
-        Text(event.title, color = Color.White, fontSize = 29.sp, fontWeight = FontWeight.Black)
-        Text(event.detailLine, color = Color(0xFFB8B1CC), fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (event.detailLine.isNotBlank()) {
+            Text(event.detailLine, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -655,12 +752,13 @@ private fun EmptyEventCard() {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(210.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .height(160.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xFF5F3BB6), Color(0xFF001025)))),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Default.Groups, null, tint = Color.White, modifier = Modifier.size(92.dp))
+        Icon(Icons.Default.Groups, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(72.dp))
+        Text("Sin eventos próximos", color = Muted, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
     }
 }
 
@@ -668,6 +766,7 @@ private fun EmptyEventCard() {
 private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismiss: () -> Unit) {
     var event by remember(initialEvent.id) { mutableStateOf(initialEvent) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    var selectedPlayerId by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(initialEvent.id) {
         while (true) {
@@ -735,7 +834,7 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
                     EventInfoPanel(event)
                 }
                 item {
-                    EventPlayersPanel(event)
+                    EventPlayersPanel(event) { playerId -> selectedPlayerId = playerId }
                 }
                 actionMessage?.let {
                     item { Text(it, color = Gold, fontWeight = FontWeight.Bold) }
@@ -776,6 +875,9 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
                 )
             }
         }
+    }
+    selectedPlayerId?.let { id ->
+        PublicProfileSheet(userId = id, vm = vm, onDismiss = { selectedPlayerId = null })
     }
 }
 
@@ -836,7 +938,7 @@ private fun EventInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 }
 
 @Composable
-private fun EventPlayersPanel(event: ApiEvent) {
+private fun EventPlayersPanel(event: ApiEvent, onPlayerTap: (Int) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -858,16 +960,18 @@ private fun EventPlayersPanel(event: ApiEvent) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
+                        .clickable { onPlayerTap(player.id) }
                         .border(1.dp, DeepPurple, RoundedCornerShape(10.dp))
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Avatar(player.avatarUrl, player.avatarColor, player.initial, 46.dp)
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         Text(player.nick, color = Color.White, fontWeight = FontWeight.Black, fontSize = 19.sp)
                         Text(player.name, color = Color(0xFFB8B1CC), fontSize = 15.sp, maxLines = 1)
                     }
+                    Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -1051,56 +1155,57 @@ private fun YouTubeCard(title: String, thumbnail: String?, onClick: () -> Unit) 
 }
 
 @Composable
-private fun TopPlayerCard(position: Int, player: ApiRankingEntry) {
+private fun TopPlayerCard(position: Int, player: ApiRankingEntry, onClick: () -> Unit) {
     val accent = when (position) {
         1 -> Gold
         2 -> Blue
         else -> Purple
     }
-    val medal = when (position) {
-        1 -> "♛"
-        2 -> "✪"
-        else -> "✹"
-    }
+    val isFirst = position == 1
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
             .background(
                 Brush.horizontalGradient(
                     listOf(
-                        accent.copy(alpha = if (position == 1) 0.32f else 0.22f),
-                        Color(0xFF111421),
-                        Color(0xFF07101A),
+                        accent.copy(alpha = if (isFirst) 0.28f else 0.16f),
+                        CardColor,
+                        CardColor.copy(alpha = 0.92f),
                     ),
                 ),
             )
-            .border(1.5.dp, accent, RoundedCornerShape(18.dp))
-            .padding(18.dp),
+            .border(if (isFirst) 1.5.dp else 1.dp, accent.copy(alpha = if (isFirst) 1f else 0.55f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = if (isFirst) 16.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
-            Avatar(player.avatarUrl, player.avatarColor, player.initial, if (position == 1) 98.dp else 76.dp)
+            Avatar(player.avatarUrl, player.avatarColor, player.initial, if (isFirst) 72.dp else 54.dp)
             Text(
                 "#$position",
-                color = if (position == 1) Color.Black else Color.White,
+                color = if (isFirst) Color.Black else Color.White,
                 fontWeight = FontWeight.Black,
-                fontSize = if (position == 1) 18.sp else 15.sp,
+                fontSize = if (isFirst) 13.sp else 11.sp,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(26.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .background(accent)
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(medal, color = accent, fontWeight = FontWeight.Black, fontSize = 25.sp)
-                Text("@${player.nick}", color = Color.White, fontWeight = FontWeight.Black, fontSize = if (position == 1) 27.sp else 23.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text(player.name, color = Color(0xFFB8B1CC), fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                ScoreChip("${player.points}", Blue)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "@${player.nick}",
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                fontSize = if (isFirst) 22.sp else 18.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(player.name, color = Muted, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                ScoreChip("${player.points} pts", Blue)
                 ScoreChip("${player.wins}V", Color(0xFF4BE66D))
                 ScoreChip("${player.draws}E", Gold)
                 ScoreChip("${player.losses}D", Color(0xFFFF555D))
@@ -1842,6 +1947,7 @@ private fun CommunityScreen(state: UiState, vm: MainViewModel) {
     var feedType by remember { mutableStateOf(CommunityFeedType.ForYou) }
     var posting by remember { mutableStateOf(false) }
     var postError by remember { mutableStateOf<String?>(null) }
+    var selectedPublicUserId by remember { mutableStateOf<Int?>(null) }
     val filteredPosts = remember(state.communityPosts, searchText) {
         val query = searchText.trim().removePrefix("@")
         if (query.isBlank()) {
@@ -1934,7 +2040,7 @@ private fun CommunityScreen(state: UiState, vm: MainViewModel) {
                     EmptyHint(if (feedType == CommunityFeedType.Following) "Aún no hay posts de jugadores seguidos." else "No hay posts que coincidan con la búsqueda.")
                 } else {
                     filteredPosts.forEach { post ->
-                        CommunityPostCard(post) { vm.toggleLike(post) }
+                        CommunityPostCard(post, onLike = { vm.toggleLike(post) }, onAuthorTap = { selectedPublicUserId = post.userId })
                     }
                 }
             }
@@ -1951,14 +2057,17 @@ private fun CommunityScreen(state: UiState, vm: MainViewModel) {
                 }
             }
             items(state.sortedRanking, key = { it.id }) { player ->
-                CommunityRankingRow(state.sortedRanking.indexOf(player) + 1, player)
+                CommunityRankingRow(state.sortedRanking.indexOf(player) + 1, player) { selectedPublicUserId = player.id }
             }
         }
+    }
+    selectedPublicUserId?.let { id ->
+        PublicProfileSheet(userId = id, vm = vm, onDismiss = { selectedPublicUserId = null })
     }
 }
 
 @Composable
-private fun CommunityPostCard(post: ApiCommunityPost, onLike: () -> Unit) {
+private fun CommunityPostCard(post: ApiCommunityPost, onLike: () -> Unit, onAuthorTap: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -1987,7 +2096,11 @@ private fun CommunityPostCard(post: ApiCommunityPost, onLike: () -> Unit) {
                 Text("Fijado", color = Gold, fontWeight = FontWeight.Black)
             }
         }
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onAuthorTap).padding(4.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Avatar(post.avatarUrl, post.avatarColor, post.initials, 50.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2090,11 +2203,12 @@ private fun CommunityActionPill(icon: ImageVector, text: String, color: Color, o
 }
 
 @Composable
-private fun CommunityRankingRow(position: Int, player: ApiRankingEntry) {
+private fun CommunityRankingRow(position: Int, player: ApiRankingEntry, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
             .background(Color(0xFF0F0E18))
             .border(1.1.dp, if (position <= 3) Gold.copy(alpha = 0.45f) else DeepPurple.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
             .padding(14.dp),
@@ -2130,27 +2244,30 @@ private fun String.relativeLabel(): String = runCatching {
 @Composable
 private fun ProfileScreen(state: UiState, vm: MainViewModel) {
     val user = state.currentUser
+
+    LaunchedEffect(Unit) { vm.reloadProfile() }
+
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { PageTitle("Perfil", "Tu cuenta y ranking") }
         if (user != null) {
+            item { ProfileHeroCard(user) }
+            item { ProfileStatsSection(user) }
+            if (user.followers != null || user.following != null) {
+                item { ProfileSocialSection(user) }
+            }
+            if (!user.medals.isNullOrEmpty()) {
+                item { ProfileMedalsSection(user.medals!!) }
+            }
+            item { ProfileInfoSection(user) }
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = CardColor), shape = RoundedCornerShape(8.dp)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Avatar(user.avatarUrl, user.avatarColor, user.initials, 58.dp)
-                            Column(Modifier.weight(1f)) {
-                                Text(user.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
-                                Text("@${user.nick}", color = Muted)
-                            }
-                            OutlinedButton({ vm.logout() }) { Text("Salir") }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            StatCard("${user.points ?: 0}", "Puntos", Modifier.weight(1f))
-                            StatCard("${user.wins ?: 0}", "Victorias", Modifier.weight(1f))
-                            StatCard("${user.losses ?: 0}", "Derrotas", Modifier.weight(1f))
-                        }
-                        user.bio?.let { Text(it, color = Muted) }
-                    }
+                Button(
+                    onClick = { vm.logout() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xCC8B1A2F)),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Icon(Icons.Default.ExitToApp, null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Cerrar sesión", fontWeight = FontWeight.Bold)
                 }
             }
         } else {
@@ -2162,14 +2279,7 @@ private fun ProfileScreen(state: UiState, vm: MainViewModel) {
                     }
                 }
             }
-            item {
-                LoginPanel(vm)
-            }
-        }
-        item {
-            SectionPanel("Ranking") {
-                state.sortedRanking.take(20).forEachIndexed { index, player -> RankingRow(index + 1, player) }
-            }
+            item { LoginPanel(vm) }
         }
     }
 }
@@ -2184,6 +2294,657 @@ private fun RankingRow(position: Int, player: ApiRankingEntry) {
             Text(player.favoriteFormat ?: player.name, color = Muted, fontSize = 12.sp)
         }
         Text("${player.points} pts", color = Color.White, fontWeight = FontWeight.Bold)
+    }
+}
+
+// ─── PROFILE COMPOSABLES ─────────────────────────────────────────────────────
+
+@Composable
+private fun ProfileHeroCard(user: ApiUser) {
+    val avatarColor = user.avatarColor?.toColorOrNull() ?: Purple
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, Border.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
+            .background(Brush.linearGradient(listOf(Panel, avatarColor.copy(alpha = 0.25f), Background))),
+    ) {
+        Row(
+            Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Avatar(user.avatarUrl, user.avatarColor, user.initials, 80.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(user.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                    if (user.role == "admin") {
+                        Text(
+                            "STAFF",
+                            color = Color.Black,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(Gold).padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                Text("@${user.nick}", color = Muted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                user.bio?.let { bio ->
+                    if (bio.isNotBlank()) Text(bio, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileStatsSection(user: ApiUser) {
+    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.EmojiEvents, null, tint = Blue, modifier = Modifier.size(18.dp))
+                Text("Estadísticas", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            Row(Modifier.fillMaxWidth()) {
+                ProfileStatPill("${user.points ?: 0}", "Puntos", Blue, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                ProfileStatPill("${user.wins ?: 0}", "Victorias", Color(0xFF4CAF50), Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                ProfileStatPill("${user.draws ?: 0}", "Empates", Gold, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                ProfileStatPill("${user.losses ?: 0}", "Derrotas", Color(0xCCF44336), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileSocialSection(user: ApiUser) {
+    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Groups, null, tint = Purple, modifier = Modifier.size(18.dp))
+                Text("Comunidad", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            Row(Modifier.fillMaxWidth()) {
+                ProfileStatPill("${user.followers ?: 0}", "Seguidores", Purple, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                ProfileStatPill("${user.following ?: 0}", "Siguiendo", Blue, Modifier.weight(1f))
+                user.posts?.let { posts ->
+                    Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                    ProfileStatPill("$posts", "Posts", Muted, Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMedalsSection(medals: List<ApiUserMedal>) {
+    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.EmojiEvents, null, tint = Gold, modifier = Modifier.size(18.dp))
+                Text("Medallas", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(medals) { medal -> MedalItem(medal) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MedalItem(medal: ApiUserMedal) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(70.dp),
+    ) {
+        if (!medal.imageUrl.isNullOrBlank()) {
+            AsyncImage(model = medal.imageUrl, contentDescription = medal.name, modifier = Modifier.size(46.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+        } else {
+            Box(Modifier.size(46.dp).clip(CircleShape).background(Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.EmojiEvents, null, tint = Gold, modifier = Modifier.size(28.dp))
+            }
+        }
+        Text(medal.name, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun ProfileInfoSection(user: ApiUser) {
+    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Info, null, tint = Blue, modifier = Modifier.size(18.dp))
+                Text("Información", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            user.favoriteFormat?.let { fmt -> if (fmt.isNotBlank()) ProfileInfoRow(Icons.Default.Style, "Formato favorito", fmt.replaceFirstChar { it.uppercase() }) }
+            user.location?.let { loc -> if (loc.isNotBlank()) ProfileInfoRow(Icons.Default.LocationOn, "Ubicación", loc) }
+            ProfileInfoRow(Icons.Default.Email, "Email", user.email)
+        }
+    }
+}
+
+@Composable
+private fun ProfileInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(icon, null, tint = Purple, modifier = Modifier.size(20.dp))
+        Column {
+            Text(label, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(value, color = Color.White, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun ProfileStatPill(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier.padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(value, color = color, fontWeight = FontWeight.Black, fontSize = 20.sp)
+        Text(label, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ProfileQuickActions(onMiPerfil: () -> Unit, onMisEventos: () -> Unit, onMiRanking: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.FilterList, null, tint = Muted, modifier = Modifier.size(18.dp))
+                Text("Opciones", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            }
+            ProfileActionButton(Icons.Default.Person, "Mi Perfil", "Ver perfil detallado y rango", onMiPerfil)
+            ProfileActionButton(Icons.Default.CalendarMonth, "Mis Eventos", "Eventos en los que participas", onMisEventos)
+            ProfileActionButton(Icons.Default.EmojiEvents, "Mi Ranking", "Tu posición y puntos", onMiRanking)
+        }
+    }
+}
+
+@Composable
+private fun ProfileActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(CardColor)
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, null, tint = Purple, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(subtitle, color = Muted, fontSize = 12.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+    }
+}
+
+// ─── PROFILE MENU SHEET ──────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileMenuSheet(
+    user: ApiUser,
+    onMiPerfil: () -> Unit,
+    onMisEventos: () -> Unit,
+    onMiRanking: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Panel) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Avatar(user.avatarUrl, user.avatarColor, user.initials, 52.dp)
+                Column {
+                    Text(user.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Text("@${user.nick}", color = Muted, fontSize = 14.sp)
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Border))
+            Spacer(Modifier.height(8.dp))
+            ProfileMenuOption(Icons.Default.Person, "Mi Perfil", "Ver perfil detallado y rango", onMiPerfil)
+            ProfileMenuOption(Icons.Default.CalendarMonth, "Mis Eventos", "Eventos en los que participas", onMisEventos)
+            ProfileMenuOption(Icons.Default.EmojiEvents, "Mi Ranking", "Tu posición y puntos", onMiRanking)
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun ProfileMenuOption(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Purple.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Purple, modifier = Modifier.size(22.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(subtitle, color = Muted, fontSize = 12.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(20.dp))
+    }
+}
+
+// ─── PROFILE SHEET (shared + public) ─────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UserProfileSheet(user: ApiUser, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Panel) {
+        ProfileSheetContent(user = user, title = "Mi Perfil")
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PublicProfileSheet(userId: Int, vm: MainViewModel, onDismiss: () -> Unit) {
+    var user by remember { mutableStateOf<ApiUser?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    LaunchedEffect(userId) {
+        vm.fetchPublicProfile(userId) { loaded ->
+            user = loaded
+            loading = false
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Panel) {
+        when {
+            loading -> Box(Modifier.fillMaxWidth().height(220.dp).navigationBarsPadding(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Purple)
+            }
+            user == null -> Box(Modifier.fillMaxWidth().padding(32.dp).navigationBarsPadding(), contentAlignment = Alignment.Center) {
+                Text("No se pudo cargar el perfil.", color = Muted)
+            }
+            else -> ProfileSheetContent(user = user!!, title = "@${user!!.nick}")
+        }
+    }
+}
+
+@Composable
+private fun ProfileSheetContent(user: ApiUser, title: String) {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        item { Text(title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp) }
+
+            item { RankBadgeCard(user) }
+
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatPillCard("${user.points ?: 0}", "Puntos", Blue, Modifier.weight(1f))
+                    StatPillCard("${user.wins ?: 0}", "Victorias", Color(0xFF4CAF50), Modifier.weight(1f))
+                    StatPillCard("${user.draws ?: 0}", "Empates", Gold, Modifier.weight(1f))
+                    StatPillCard("${user.losses ?: 0}", "Derrotas", Color(0xCCF44336), Modifier.weight(1f))
+                }
+            }
+
+            if (user.followers != null || user.following != null) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(10.dp)),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        ProfileStatPill("${user.followers ?: 0}", "Seguidores", Purple, Modifier.weight(1f))
+                        Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                        ProfileStatPill("${user.following ?: 0}", "Siguiendo", Blue, Modifier.weight(1f))
+                        user.posts?.let { posts ->
+                            Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                            ProfileStatPill("$posts", "Posts", Muted, Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+
+            val balance = user.chequetiendaBalance
+            if (balance != null && balance > 0) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.padding(end = 8.dp).size(20.dp))
+                        Text("Cheque Tienda", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text("%.2f€".format(balance), color = Color(0xFF4CAF50), fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    }
+                }
+            }
+
+            val tier = user.socioTier
+            if (!tier.isNullOrBlank()) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).border(1.dp, Gold.copy(alpha = 0.4f), RoundedCornerShape(10.dp)).padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Star, null, tint = Gold, modifier = Modifier.padding(end = 8.dp).size(20.dp))
+                        Text("Socio ${tier.replaceFirstChar { it.uppercase() }}", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        user.socioStatus?.let { status ->
+                            Text(
+                                status.replaceFirstChar { it.uppercase() },
+                                color = Gold,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.15f)).border(1.dp, Gold.copy(alpha = 0.45f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            val medals = user.medals
+            if (!medals.isNullOrEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.EmojiEvents, null, tint = Gold, modifier = Modifier.size(18.dp))
+                            Text("Medallas", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            items(medals) { medal -> MedalItem(medal) }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Info, null, tint = Blue, modifier = Modifier.size(18.dp))
+                        Text("Información", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    }
+                    user.favoriteFormat?.let { fmt -> if (fmt.isNotBlank()) ProfileInfoRow(Icons.Default.Style, "Formato favorito", fmt.replaceFirstChar { it.uppercase() }) }
+                    user.location?.let { loc -> if (loc.isNotBlank()) ProfileInfoRow(Icons.Default.LocationOn, "Ubicación", loc) }
+                    user.bio?.let { bio -> if (bio.isNotBlank()) ProfileInfoRow(Icons.Default.ChatBubble, "Bio", bio) }
+                    ProfileInfoRow(Icons.Default.Email, "Email", user.email)
+                }
+            }
+
+            item { Spacer(Modifier.height(32.dp)) }
+        }
+}
+
+@Composable
+private fun RankBadgeCard(user: ApiUser) {
+    val points = user.points ?: 0
+    val rank = playerRank(points)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(rank.color.copy(alpha = 0.12f)).border(1.dp, rank.color.copy(alpha = 0.4f), RoundedCornerShape(10.dp)).padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(rank.icon, null, tint = rank.color, modifier = Modifier.size(36.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(rank.name, color = rank.color, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("$points puntos · ${rank.nextLabel}", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(CardColor)) {
+                Box(Modifier.fillMaxWidth(rank.progress(points)).height(6.dp).clip(RoundedCornerShape(3.dp)).background(rank.color))
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatPillCard(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.10f)).border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(value, color = color, fontWeight = FontWeight.Black, fontSize = 20.sp)
+        Text(label, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+private data class PlayerRankData(
+    val name: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val color: Color,
+    val min: Int,
+    val max: Int?,
+) {
+    val nextLabel: String get() = max?.let { "Siguiente en $it pts" } ?: "Rango máximo"
+    fun progress(points: Int): Float {
+        val maxPts = max ?: return 1f
+        val range = (maxPts - min).toFloat()
+        if (range <= 0f) return 1f
+        return ((points - min).toFloat() / range).coerceIn(0f, 1f)
+    }
+}
+
+private fun playerRank(points: Int): PlayerRankData = when {
+    points >= 200 -> PlayerRankData("Leyenda Local", Icons.Default.EmojiEvents, Gold, 200, null)
+    points >= 100 -> PlayerRankData("Planeswalker", Icons.Default.AutoAwesome, Purple, 100, 200)
+    points >= 40  -> PlayerRankData("Duelista", Icons.Default.Shield, Blue, 40, 100)
+    else          -> PlayerRankData("Aprendiz", Icons.Default.School, Muted, 0, 40)
+}
+
+// ─── USER EVENTS SHEET ───────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UserEventsSheet(state: UiState, vm: MainViewModel, onDismiss: () -> Unit) {
+    var filter by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { vm.loadEvents() }
+
+    val joinedEvents = state.events.filter { it.isJoined == true }
+    val now = LocalDateTime.now()
+    val filtered = when (filter) {
+        1 -> joinedEvents.filter { (it.startDate ?: LocalDateTime.MIN) >= now }
+        2 -> joinedEvents.filter { (it.startDate ?: LocalDateTime.MIN) < now }
+        else -> joinedEvents
+    }.sortedByDescending { it.startDate }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Panel) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+            Text("Mis Eventos", color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Todos", "Próximos", "Pasados").forEachIndexed { i, label ->
+                    FilterChip(
+                        selected = filter == i,
+                        onClick = { filter = i },
+                        label = { Text(label, fontSize = 13.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Purple,
+                            selectedLabelColor = Color.White,
+                            containerColor = CardColor,
+                            labelColor = Muted,
+                        ),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            if (filtered.isEmpty()) {
+                EmptyHint("No hay eventos en esta categoría.")
+                Spacer(Modifier.height(48.dp))
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(filtered) { event -> UserEventRow(event) }
+                    item { Spacer(Modifier.height(32.dp)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserEventRow(event: ApiEvent) {
+    val isPast = (event.startDate ?: LocalDateTime.MAX) < LocalDateTime.now()
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(CardColor).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(42.dp)) {
+            Text(event.dayOfMonth, color = Blue, fontWeight = FontWeight.Black, fontSize = 22.sp)
+            Text(event.monthShort, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Black)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(event.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (event.detailLine.isNotBlank()) Text(event.detailLine, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                val statusColor = if (isPast) Muted else Color(0xFF4CAF50)
+                Text(
+                    if (isPast) "Finalizado" else "Próximo",
+                    color = statusColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(statusColor.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+                val price = event.price
+                if (price != null && price > 0) {
+                    Text("%.2f€".format(price), color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    Text("Gratis", color = Blue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ─── USER RANKING SHEET ──────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UserRankingSheet(user: ApiUser, state: UiState, vm: MainViewModel, onDismiss: () -> Unit) {
+    LaunchedEffect(Unit) { vm.loadMatchHistory() }
+
+    val ranking = state.sortedRanking
+    val totalPlayers = ranking.size
+    val rankPosition = ranking.indexOfFirst { it.id == user.id }.takeIf { it >= 0 }?.plus(1)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Panel) {
+        LazyColumn(
+            contentPadding = PaddingValues(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item { Text("Mi Ranking", color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp) }
+
+            item {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(12.dp)).padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(rankPosition?.let { "#$it" } ?: "—", color = Gold, fontWeight = FontWeight.Black, fontSize = 42.sp)
+                        Text("Posición", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Box(Modifier.width(1.dp).height(60.dp).background(Border))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("$totalPlayers", color = Blue, fontWeight = FontWeight.Black, fontSize = 42.sp)
+                        Text("Jugadores", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Box(Modifier.width(1.dp).height(60.dp).background(Border))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("${user.points ?: 0}", color = Purple, fontWeight = FontWeight.Black, fontSize = 42.sp)
+                        Text("Puntos", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            item {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(12.dp)).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.FilterList, null, tint = Blue, modifier = Modifier.size(18.dp))
+                        Text("Desglose de puntos", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    }
+                    val wins = user.wins ?: 0
+                    val draws = user.draws ?: 0
+                    PointsRow(Icons.Default.EmojiEvents, "Victorias ×20", wins * 20, Color(0xFF4CAF50))
+                    PointsRow(Icons.Default.Remove, "Empates ×10", draws * 10, Gold)
+                    PointsRow(Icons.Default.Close, "Derrotas ×0", 0, Color(0xCCF44336))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Border))
+                    PointsRow(Icons.Default.AutoAwesome, "Total", user.points ?: 0, Blue)
+                }
+            }
+
+            if (state.matchHistory.isNotEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).border(1.dp, Border, RoundedCornerShape(12.dp)).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                            Icon(Icons.Default.History, null, tint = Blue, modifier = Modifier.size(18.dp))
+                            Text("Historial de partidas", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        }
+                        state.matchHistory.take(20).forEach { match -> MatchHistoryRow(match) }
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(32.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun PointsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: Int, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+        Text(label, color = Muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text("+$value pts", color = color, fontWeight = FontWeight.Black, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun MatchHistoryRow(match: ApiMatchHistory) {
+    val color = when (match.result.lowercase()) {
+        "win" -> Color(0xFF4CAF50)
+        "draw" -> Gold
+        else -> Color(0xCCF44336)
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            match.resultLabel,
+            color = color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.14f)).border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(match.opponent ?: "Rival desconocido", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            match.note?.let { note -> if (note.isNotBlank()) Text(note, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+        Text(match.createdAt.take(10).isoDateLabel(), color = Muted, fontSize = 11.sp)
     }
 }
 
@@ -2614,16 +3375,32 @@ private fun PageTitle(title: String, subtitle: String) {
 
 @Composable
 private fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(
+    Box(
         modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xDD0F0D1C))
-            .border(1.1.dp, DeepPurple.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
-            .padding(vertical = 20.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(CardColor, Active.copy(alpha = 0.42f)),
+                    start = Offset(0f, 0f),
+                    end = Offset(0f, Float.POSITIVE_INFINITY),
+                ),
+            )
+            .border(1.dp, Border.copy(alpha = 0.45f), RoundedCornerShape(10.dp)),
     ) {
-        Text(value, color = Purple, fontWeight = FontWeight.Black, fontSize = 42.sp)
-        Text(label.uppercase(), color = Color(0xFFB8B1CC), fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp, maxLines = 1)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(Color.White.copy(alpha = 0.07f)),
+        )
+        Column(
+            Modifier.padding(vertical = 18.dp, horizontal = 8.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(value, color = Purple, fontWeight = FontWeight.Black, fontSize = 34.sp)
+            Spacer(Modifier.height(2.dp))
+            Text(label.uppercase(), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, maxLines = 1)
+        }
     }
 }
 

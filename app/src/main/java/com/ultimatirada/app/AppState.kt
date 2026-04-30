@@ -27,6 +27,7 @@ data class UiState(
     val stats: ApiStats? = null,
     val communityPosts: List<ApiCommunityPost> = emptyList(),
     val currentUser: ApiUser? = null,
+    val matchHistory: List<ApiMatchHistory> = emptyList(),
     val isCheckingAuth: Boolean = true,
     val isLoading: Boolean = false,
     val hasLoadedOnce: Boolean = false,
@@ -156,6 +157,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loadProducts() = viewModelScope.launch { loadProductsInternal().onSuccess { data -> _uiState.update { it.copy(products = data) } } }
     fun loadEvents() = viewModelScope.launch { loadEventsInternal().onSuccess { data -> _uiState.update { it.copy(events = data) } } }
     fun loadRanking() = viewModelScope.launch { loadRankingInternal().onSuccess { data -> _uiState.update { it.copy(ranking = data) } } }
+
+    fun reloadProfile() = viewModelScope.launch {
+        runCatching { api.fetchMyProfile() }
+            .onSuccess { user -> _uiState.update { it.copy(currentUser = user) } }
+    }
+
+    fun loadMatchHistory() = viewModelScope.launch {
+        runCatching { api.fetchMatchHistory() }
+            .onSuccess { history -> _uiState.update { it.copy(matchHistory = history) } }
+    }
+
+    fun fetchPublicProfile(userId: Int, onResult: (ApiUser?) -> Unit) = viewModelScope.launch {
+        runCatching { api.fetchPublicProfile(userId) }
+            .onSuccess { onResult(it) }
+            .onFailure { onResult(null) }
+    }
 
     fun loadCommunity(type: CommunityFeedType) = viewModelScope.launch {
         runCatching { api.fetchCommunityFeed(type) }
