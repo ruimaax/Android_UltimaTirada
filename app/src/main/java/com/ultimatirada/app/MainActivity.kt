@@ -485,19 +485,19 @@ private fun AppHeader(user: ApiUser?, cartCount: Int, onCartTap: () -> Unit, onA
             .statusBarsPadding()
             .background(Color(0xF7000005))
             .border(1.dp, DeepPurple.copy(alpha = 0.85f))
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Image(painterResource(R.drawable.logosff), null, Modifier.size(58.dp), contentScale = ContentScale.Fit)
+        Image(painterResource(R.drawable.logosff), null, Modifier.size(44.dp), contentScale = ContentScale.Fit)
         Column(Modifier.weight(1f)) {
-            Text("Última Tirada", color = Color.White, fontWeight = FontWeight.Black, fontSize = 24.sp, maxLines = 1)
-            Text("Magic: The Gathering en Ceuta", color = Color(0xFFB7B1CC), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text("Última Tirada", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, maxLines = 1)
+            Text("Magic: The Gathering en Ceuta", color = Color(0xFFB7B1CC), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
         IconButton(onClick = onCartTap) {
             BadgedBox(badge = { if (cartCount > 0) Badge { Text("$cartCount") } }) {
-                Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0xFF211B3F)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito", tint = Color(0xFFBDB6CF), modifier = Modifier.size(34.dp))
+                Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF211B3F)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito", tint = Color(0xFFBDB6CF), modifier = Modifier.size(22.dp))
                 }
             }
         }
@@ -505,45 +505,59 @@ private fun AppHeader(user: ApiUser?, cartCount: Int, onCartTap: () -> Unit, onA
             Modifier
                 .clip(CircleShape)
                 .clickable(onClick = onAvatarTap)
-                .border(2.dp, if (user != null) Purple.copy(alpha = 0.6f) else Color.Transparent, CircleShape),
+                .border(1.5.dp, if (user != null) Purple.copy(alpha = 0.6f) else Color.Transparent, CircleShape),
         ) {
-            Avatar(user?.avatarUrl, user?.avatarColor, user?.initial ?: "UT", 54.dp)
+            Avatar(user?.avatarUrl, user?.avatarColor, user?.initial ?: "UT", 40.dp)
         }
     }
 }
 
 @Composable
 private fun AppBottomBar(selected: AppTab, onSelected: (AppTab) -> Unit) {
-    NavigationBar(
-        containerColor = Color(0xFA05050D),
-        tonalElevation = 0.dp,
-        modifier = Modifier.border(1.dp, DeepPurple.copy(alpha = 0.75f)),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFA05050D))
+            .border(1.dp, DeepPurple.copy(alpha = 0.75f))
+            .navigationBarsPadding()
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         AppTab.entries.forEach { tab ->
-            NavigationBarItem(
-                selected = selected == tab,
-                onClick = { onSelected(tab) },
-                icon = {
-                    Icon(
-                        imageVector = when (tab) {
-                            AppTab.Home -> Icons.Default.Home
-                            AppTab.Store -> Icons.Default.Storefront
-                            AppTab.Events -> Icons.Default.CalendarMonth
-                            AppTab.Community -> Icons.Default.Favorite
-                            AppTab.Profile -> Icons.Default.Person
-                        },
-                        contentDescription = tab.label,
-                    )
-                },
-                label = { Text(tab.label, fontSize = 10.sp) },
-                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color.White,
-                    selectedTextColor = Color.White,
-                    indicatorColor = Color(0xFF2D225A),
-                    unselectedIconColor = Color(0xFFB8B1CC),
-                    unselectedTextColor = Color(0xFFB8B1CC),
-                ),
-            )
+            val isSelected = selected == tab
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(if (isSelected) Color(0xFF2D225A) else Color.Transparent)
+                    .clickable { onSelected(tab) }
+                    .padding(horizontal = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = when (tab) {
+                        AppTab.Home -> Icons.Default.Home
+                        AppTab.Store -> Icons.Default.Storefront
+                        AppTab.Events -> Icons.Default.CalendarMonth
+                        AppTab.Community -> Icons.Default.Groups
+                        AppTab.Profile -> Icons.Default.Person
+                    },
+                    contentDescription = tab.label,
+                    tint = if (isSelected) Color.White else Color(0xFFB8B1CC),
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    tab.label,
+                    color = if (isSelected) Color.White else Color(0xFFB8B1CC),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -553,7 +567,7 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
     var detailEvent by remember { mutableStateOf<ApiEvent?>(null) }
     var selectedPublicUserId by remember { mutableStateOf<Int?>(null) }
 
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
             HeroCard(onEvents = { onTab(AppTab.Events) }, onStore = { onTab(AppTab.Store) })
         }
@@ -566,7 +580,7 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
         }
         state.errorMessage?.let { item { ErrorBanner(it) { vm.loadAll() } } }
         item {
-            HomeSection(title = "Próximos eventos", icon = { Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
+            HomeSection(title = "Próximos eventos", icon = { Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(16.dp)) }) {
                 if (state.upcomingEvents.isEmpty()) {
                     EmptyEventCard()
                 } else {
@@ -575,17 +589,17 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
             }
         }
         item {
-            HomeSection(title = "Productos destacados", icon = { Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
+            HomeSection(title = "Productos destacados", icon = { Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(16.dp)) }) {
                 FeaturedProductsCarousel(products = state.featuredProducts) { onTab(AppTab.Store) }
             }
         }
         item {
-            HomeSection(title = "Nuestro canal", icon = { Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
+            HomeSection(title = "Nuestro canal", icon = { Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(16.dp)) }) {
                 YouTubeCarousel(state.youtubeVideos)
             }
         }
         item {
-            HomeSection(title = "Top jugadores de la comunidad", icon = { Icon(Icons.Default.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(18.dp)) }) {
+            HomeSection(title = "Top jugadores de la comunidad", icon = { Icon(Icons.Default.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(16.dp)) }) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.topThree.forEachIndexed { index, player ->
                         TopPlayerCard(index + 1, player) { selectedPublicUserId = player.id }
@@ -618,10 +632,10 @@ private fun HeroCard(onEvents: () -> Unit, onStore: () -> Unit) {
                 start = androidx.compose.ui.geometry.Offset(0f, 0f),
                 end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
             ))
-            .border(1.dp, Border.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+            .border(1.3.dp, Border.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
             .padding(horizontal = 22.dp, vertical = 30.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text(
             "BIENVENIDO A",
@@ -645,32 +659,32 @@ private fun HeroCard(onEvents: () -> Unit, onStore: () -> Unit) {
         Text(
             "Tu comunidad oficial de Magic: The Gathering en Ceuta.\nTorneos, eventos, ligas, ranking y tienda online.",
             color = Muted,
-            lineHeight = 26.sp,
+            lineHeight = 22.sp,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
         Button(
             onClick = onEvents,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(40.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Purple),
         ) {
-            Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Próximos Eventos", fontSize = 16.sp, fontWeight = FontWeight.Black)
+            Text("Próximos Eventos", fontSize = 15.sp, fontWeight = FontWeight.Black)
         }
         OutlinedButton(
             onClick = onStore,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(40.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Gold.copy(alpha = 0.6f)),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Gold.copy(alpha = 0.75f)),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Gold),
         ) {
-            Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Ir a la Tienda", fontSize = 16.sp, fontWeight = FontWeight.Black)
+            Text("Ir a la Tienda", fontSize = 15.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -680,7 +694,7 @@ private fun HomeSection(title: String, icon: @Composable () -> Unit, content: @C
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 Brush.linearGradient(
                     listOf(Panel, Active.copy(alpha = 0.22f), Panel),
@@ -688,21 +702,13 @@ private fun HomeSection(title: String, icon: @Composable () -> Unit, content: @C
                     end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
                 ),
             )
-            .border(1.dp, Border.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .border(1.dp, Border.copy(alpha = 0.75f), RoundedCornerShape(8.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Active),
-                contentAlignment = Alignment.Center,
-            ) {
-                icon()
-            }
-            Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.2.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            icon()
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 0.sp)
         }
         content()
     }
@@ -729,16 +735,16 @@ private fun HomeEventCard(event: ApiEvent, onClick: () -> Unit) {
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)))),
             )
             Column(
-                Modifier.align(Alignment.BottomStart).padding(14.dp),
+                Modifier.align(Alignment.BottomStart).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     "${event.dayOfMonth} ${event.monthShort.lowercase().replaceFirstChar { it.uppercase() }} · ${event.time.take(5)}",
                     color = Color.White,
-                    fontSize = 13.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
                 )
-                Text(event.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(event.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (event.detailLine.isNotBlank()) {
@@ -828,7 +834,7 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
                     }
                 }
                 item {
-                    Text(event.title, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                    Text(event.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 }
                 item {
                     EventInfoPanel(event)
@@ -928,11 +934,11 @@ private fun EventInfoPanel(event: ApiEvent) {
 
 @Composable
 private fun EventInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Icon(icon, null, tint = Purple, modifier = Modifier.size(28.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, null, tint = Purple, modifier = Modifier.size(18.dp))
         Column {
-            Text(label, color = Color(0xFFB8B1CC), fontWeight = FontWeight.Black, fontSize = 16.sp)
-            Text(value, color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            Text(label, color = Color(0xFFB8B1CC), fontWeight = FontWeight.Black, fontSize = 12.sp)
+            Text(value, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp)
         }
     }
 }
@@ -947,9 +953,9 @@ private fun EventPlayersPanel(event: ApiEvent, onPlayerTap: (Int) -> Unit) {
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.Groups, null, tint = Color.White, modifier = Modifier.size(30.dp))
-            Text("Jugadores apuntados", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Groups, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Text("Jugadores apuntados", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
         val players = event.players.orEmpty()
         if (players.isEmpty()) {
@@ -983,20 +989,66 @@ private fun FeaturedProductsCarousel(products: List<ApiProduct>, onOpenStore: ()
     if (products.isEmpty()) {
         EmptyHint("Aún no hay productos destacados.")
     } else {
+        var currentIndex by remember { mutableStateOf(0) }
         val listState = rememberLazyListState()
+
         LaunchedEffect(products.size) {
             if (products.size > 1) {
-                var index = 0
                 while (true) {
                     delay(3_500)
-                    index = (index + 1) % products.size
-                    listState.animateScrollToItem(index)
+                    currentIndex = (currentIndex + 1) % products.size
+                    listState.animateScrollToItem(currentIndex)
                 }
             }
         }
-        LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(products, key = { it.id }) { product ->
-                FeaturedProductHomeCard(product, onOpenStore)
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box {
+                LazyRow(
+                    state = listState,
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    userScrollEnabled = false,
+                ) {
+                    items(products, key = { it.id }) { product ->
+                        FeaturedProductHomeCard(product, onOpenStore)
+                    }
+                }
+                // Nav arrows overlaid on image area
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    VideoArrow(Icons.Default.ChevronLeft) {
+                        currentIndex = if (currentIndex == 0) products.lastIndex else currentIndex - 1
+                    }
+                    VideoArrow(Icons.Default.ChevronRight) {
+                        currentIndex = (currentIndex + 1) % products.size
+                    }
+                }
+                LaunchedEffect(currentIndex) {
+                    listState.animateScrollToItem(currentIndex)
+                }
+            }
+            // Pagination dots
+            if (products.size > 1) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    products.forEachIndexed { index, _ ->
+                        Box(
+                            Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(if (index == currentIndex) 8.dp else 6.dp)
+                                .clip(CircleShape)
+                                .background(if (index == currentIndex) Purple else Color(0xFF4A4560)),
+                        )
+                    }
+                }
             }
         }
     }
@@ -1006,50 +1058,60 @@ private fun FeaturedProductsCarousel(products: List<ApiProduct>, onOpenStore: ()
 private fun FeaturedProductHomeCard(product: ApiProduct, onOpenStore: () -> Unit) {
     Column(
         Modifier
-            .width(320.dp)
+            .fillParentMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xF20A0913))
             .border(1.dp, DeepPurple.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(200.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Brush.horizontalGradient(listOf(Color(0xFF3B216F), Color(0xFF060813)))),
         ) {
-            ProductImage(product.image, Modifier.fillMaxSize().padding(20.dp))
+            ProductImage(product.image, Modifier.fillMaxSize().padding(16.dp))
             Text(
                 "Destacado",
                 color = Color.White,
                 fontWeight = FontWeight.Black,
-                fontSize = 16.sp,
+                fontSize = 12.sp,
                 modifier = Modifier
-                    .padding(12.dp)
+                    .padding(10.dp)
                     .clip(RoundedCornerShape(30.dp))
                     .background(Purple)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(product.name.uppercase(), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text(product.priceFormatted, color = Blue, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text(product.name.uppercase(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(product.priceFormatted, color = Blue, fontSize = 16.sp, fontWeight = FontWeight.Black)
         }
-        Text("${product.brand ?: "ULTIMA TIRADA"} · ${product.collection ?: product.category ?: "TIENDA"}".uppercase(), color = Color(0xFFB8B1CC), fontSize = 15.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        Text(
+            "${product.brand ?: "ULTIMA TIRADA"} · ${product.collection ?: product.category ?: "TIENDA"}".uppercase(),
+            color = Color(0xFFB8B1CC),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = onOpenStore,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.White),
-                contentPadding = PaddingValues(0.dp),
+            Row(
+                Modifier.clickable(onClick = onOpenStore),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.Default.ArrowCircleRight, null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Ver en tienda", fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Icon(Icons.Default.ArrowCircleRight, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Text("Ver en tienda", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
             }
             Spacer(Modifier.weight(1f))
-            Text("Stock: ${product.stock}", color = Color(0xFF56E45D), fontSize = 17.sp, fontWeight = FontWeight.Black)
+            Text(
+                "Stock: ${product.stock}",
+                color = if (product.isInStock) Color(0xFF56E45D) else Color(0xFFFF555D),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+            )
         }
     }
 }
@@ -1058,7 +1120,7 @@ private fun FeaturedProductHomeCard(product: ApiProduct, onOpenStore: () -> Unit
 private fun YouTubeCarousel(videos: List<ApiYouTubeVideo>) {
     val context = LocalContext.current
     if (videos.isEmpty()) {
-        YouTubeCard(
+        YouTubeCardStandalone(
             title = "Última Tirada",
             thumbnail = null,
             onClick = {
@@ -1066,10 +1128,14 @@ private fun YouTubeCarousel(videos: List<ApiYouTubeVideo>) {
             },
         )
     } else {
-        val listState = rememberLazyListState()
         var selectedIndex by remember(videos.size) { mutableStateOf(0) }
+        val listState = rememberLazyListState()
         Box {
-            LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            LazyRow(
+                state = listState,
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                userScrollEnabled = false,
+            ) {
                 items(videos, key = { it.id }) { video ->
                     YouTubeCard(
                         title = video.title,
@@ -1082,9 +1148,8 @@ private fun YouTubeCarousel(videos: List<ApiYouTubeVideo>) {
             }
             Row(
                 Modifier
-                    .width(330.dp)
-                    .height(250.dp)
-                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .height(220.dp)
                     .padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -1107,14 +1172,14 @@ private fun YouTubeCarousel(videos: List<ApiYouTubeVideo>) {
 private fun VideoArrow(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Box(
         Modifier
-            .size(52.dp)
+            .size(36.dp)
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.68f))
-            .border(1.3.dp, DeepPurple, CircleShape)
+            .border(1.dp, DeepPurple, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(36.dp))
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -1122,10 +1187,10 @@ private fun VideoArrow(icon: androidx.compose.ui.graphics.vector.ImageVector, on
 private fun YouTubeCard(title: String, thumbnail: String?, onClick: () -> Unit) {
     Box(
         Modifier
-            .width(330.dp)
-            .height(250.dp)
+            .fillParentMaxWidth()
+            .height(220.dp)
             .clip(RoundedCornerShape(8.dp))
-            .border(1.2.dp, DeepPurple, RoundedCornerShape(8.dp))
+            .border(1.dp, DeepPurple, RoundedCornerShape(8.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xFF130B22), Color(0xFF000000))))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -1137,19 +1202,42 @@ private fun YouTubeCard(title: String, thumbnail: String?, onClick: () -> Unit) 
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)))
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)))
         }
         Text(
             title,
             color = Color.White,
-            fontSize = 18.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Black,
-            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(14.dp),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Box(Modifier.size(78.dp).clip(CircleShape).background(Color(0xFFFF5656)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(54.dp))
+        Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFFFF5656)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(36.dp))
+        }
+    }
+}
+
+@Composable
+private fun YouTubeCardStandalone(title: String, thumbnail: String?, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, DeepPurple, RoundedCornerShape(8.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF130B22), Color(0xFF000000))))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (thumbnail != null) {
+            AsyncImage(model = thumbnail, contentDescription = title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)))
+        }
+        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.TopStart).padding(14.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFFFF5656)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.PlayCircle, null, tint = Color.White, modifier = Modifier.size(36.dp))
         }
     }
 }
@@ -1182,29 +1270,29 @@ private fun TopPlayerCard(position: Int, player: ApiRankingEntry, onClick: () ->
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
-            Avatar(player.avatarUrl, player.avatarColor, player.initial, if (isFirst) 72.dp else 54.dp)
+            Avatar(player.avatarUrl, player.avatarColor, player.initial, if (isFirst) 52.dp else 42.dp)
             Text(
                 "#$position",
                 color = if (isFirst) Color.Black else Color.White,
                 fontWeight = FontWeight.Black,
-                fontSize = if (isFirst) 13.sp else 11.sp,
+                fontSize = if (isFirst) 11.sp else 9.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
                     .background(accent)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 "@${player.nick}",
                 color = Color.White,
                 fontWeight = FontWeight.Black,
-                fontSize = if (isFirst) 22.sp else 18.sp,
+                fontSize = if (isFirst) 16.sp else 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(player.name, color = Muted, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(player.name, color = Muted, fontWeight = FontWeight.Medium, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ScoreChip("${player.points} pts", Blue)
                 ScoreChip("${player.wins}V", Color(0xFF4BE66D))
                 ScoreChip("${player.draws}E", Gold)
@@ -1216,7 +1304,7 @@ private fun TopPlayerCard(position: Int, player: ApiRankingEntry, onClick: () ->
 
 @Composable
 private fun ScoreChip(text: String, color: Color) {
-    Text(text, color = color, fontSize = 16.sp, fontWeight = FontWeight.Black)
+    Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Black)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1352,17 +1440,17 @@ private fun Set<String>.toggle(value: String): Set<String> = if (contains(value)
 
 @Composable
 private fun StoreTitle() {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Icon(Icons.Default.Inventory2, null, tint = Color.White, modifier = Modifier.size(46.dp))
-            Text("Tienda", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Black)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Default.Inventory2, null, tint = Color.White, modifier = Modifier.size(24.dp))
+            Text("Tienda", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
         }
         Text(
             "Accesorios, fundas, binders y material para tus partidas.",
             color = Color(0xFFB8B1CC),
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 28.sp,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 20.sp,
         )
     }
 }
@@ -1374,20 +1462,20 @@ private fun SellCardsBanner(onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xAA11101C))
-            .border(1.2.dp, Gold.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+            .border(1.dp, Gold.copy(alpha = 0.30f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(18.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(Modifier.size(58.dp).clip(CircleShape).background(Gold.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Euro, null, tint = Gold, modifier = Modifier.size(34.dp))
+        Box(Modifier.size(44.dp).clip(CircleShape).background(Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Euro, null, tint = Gold, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text("¿Quieres vender tus cartas?", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Black)
-            Text("Pide una valoración gratuita", color = Color(0xFFB8B1CC), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("¿Quieres vender tus cartas?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Black)
+            Text("Pide una valoración gratuita", color = Color(0xFFB8B1CC), fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
-        Icon(Icons.Default.ChevronRight, null, tint = Color(0xFFB8B1CC), modifier = Modifier.size(34.dp))
+        Icon(Icons.Default.ChevronRight, null, tint = Color(0xFFB8B1CC), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1422,19 +1510,19 @@ private fun StoreFiltersPanel(
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.FilterList, null, tint = Color.White, modifier = Modifier.size(32.dp))
-            Text("Filtros", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.FilterList, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Text("Filtros", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
         FilterRow("Marca", brands, selectedBrands, onToggleBrand)
         FilterRow("Colección", collections, selectedCollections, onToggleCollection)
         FilterRow("Categoría", categories, selectedCategories, onToggleCategory)
-        Text("Rango de precio", color = Color(0xFFB8B1CC), fontSize = 16.sp, fontWeight = FontWeight.Black)
+        Text("Rango de precio", color = Color(0xFFB8B1CC), fontSize = 12.sp, fontWeight = FontWeight.Black)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StoreSmallField("Mín €", minPrice, onMinPrice, Modifier.weight(1f))
             StoreSmallField("Máx €", maxPrice, onMaxPrice, Modifier.weight(1f))
         }
-        Text("Stock", color = Color(0xFFB8B1CC), fontSize = 16.sp, fontWeight = FontWeight.Black)
+        Text("Stock", color = Color(0xFFB8B1CC), fontSize = 12.sp, fontWeight = FontWeight.Black)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -1455,7 +1543,7 @@ private fun StoreFiltersPanel(
                 }
             }
         }
-        Text("Ordenar", color = Color(0xFFB8B1CC), fontSize = 16.sp, fontWeight = FontWeight.Black)
+        Text("Ordenar", color = Color(0xFFB8B1CC), fontSize = 12.sp, fontWeight = FontWeight.Black)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             listOf("Destacados", "Precio ↑", "Precio ↓", "Nombre").forEach { option ->
                 FilterChipPill(option, sortOption == option) { onSortOption(option) }
@@ -1593,11 +1681,11 @@ private fun ProductDetailDialog(product: ApiProduct, cart: CartStore, onDismiss:
                     }
                 }
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text((product.brand ?: "ULTIMA TIRADA").uppercase(), color = Color(0xFFB8B1CC), fontSize = 16.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-                        Text(product.name.uppercase(), color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 38.sp)
-                        Text(product.priceFormatted, color = Purple, fontSize = 32.sp, fontWeight = FontWeight.Black)
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text((product.brand ?: "ULTIMA TIRADA").uppercase(), color = Color(0xFFB8B1CC), fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+                        Text(product.name.uppercase(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, lineHeight = 26.sp)
+                        Text(product.priceFormatted, color = Purple, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EventTag(product.collection ?: "TIENDA", Purple)
                             EventTag(product.category ?: "PRODUCTO", Blue)
                             ProductStockTag(product.stock)
@@ -1606,19 +1694,19 @@ private fun ProductDetailDialog(product: ApiProduct, cart: CartStore, onDismiss:
                 }
                 item {
                     Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF19162C)).padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF19162C)).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Descripción", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                        Text(product.description ?: "Sin descripción disponible.", color = Color(0xFFB8B1CC), fontSize = 19.sp)
+                        Text("Descripción", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                        Text(product.description ?: "Sin descripción disponible.", color = Color(0xFFB8B1CC), fontSize = 14.sp)
                     }
                 }
                 item {
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF19162C)).padding(18.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF19162C)).padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Cantidad", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                        Text("Cantidad", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                         Row(Modifier.clip(RoundedCornerShape(28.dp)).background(Color(0xFF343240)), verticalAlignment = Alignment.CenterVertically) {
                             IconButton({ quantity = (quantity - 1).coerceAtLeast(1) }) { Icon(Icons.Default.Remove, null, tint = Color.White) }
                             Text("$quantity", color = Color.White, fontWeight = FontWeight.Black)
@@ -1638,13 +1726,13 @@ private fun ProductDetailDialog(product: ApiProduct, cart: CartStore, onDismiss:
                     .fillMaxWidth()
                     .padding(horizontal = 26.dp)
                     .padding(bottom = 54.dp)
-                    .height(64.dp),
+                    .height(52.dp),
                 shape = RoundedCornerShape(36.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Purple),
             ) {
                 Icon(Icons.Default.ShoppingCart, null)
-                Spacer(Modifier.width(10.dp))
-                Text("Añadir al carrito", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.width(8.dp))
+                Text("Añadir al carrito", fontSize = 16.sp, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -1688,11 +1776,11 @@ private fun EventsScreen(state: UiState, vm: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(48.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(24.dp))
                 Column {
-                    Text("Eventos", color = Color.White, fontWeight = FontWeight.Black, fontSize = 42.sp)
-                    Text("Torneos, ligas y quedadas de la comunidad.", color = Muted, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Text("Eventos", color = Color.White, fontWeight = FontWeight.Black, fontSize = 28.sp)
+                    Text("Torneos, ligas y quedadas de la comunidad.", color = Muted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1747,9 +1835,9 @@ private fun EventsCalendarCard(
             .padding(horizontal = 18.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(30.dp))
-            Text("Calendario de eventos", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Text("Calendario de eventos", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             CircleIconButton(Icons.Default.ChevronLeft, onPrevious)
@@ -1757,7 +1845,7 @@ private fun EventsCalendarCard(
                 month.month.getDisplayName(java.time.format.TextStyle.FULL, Locale("es", "ES"))
                     .replaceFirstChar { it.uppercase() } + " ${month.year}",
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f),
@@ -1805,11 +1893,11 @@ private fun CircleIconButton(icon: androidx.compose.ui.graphics.vector.ImageVect
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .size(54.dp)
+            .size(36.dp)
             .clip(CircleShape)
             .background(Color(0xFF090914)),
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(34.dp))
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -1841,8 +1929,8 @@ private fun CalendarDayCell(
                 hasEvent -> Color.White
                 else -> Color(0xFF6E6A80)
             },
-            fontSize = 21.sp,
-            fontWeight = if (hasEvent) FontWeight.Black else FontWeight.Bold,
+            fontSize = 14.sp,
+            fontWeight = if (hasEvent) FontWeight.Black else FontWeight.Normal,
         )
         if (hasEvent) {
             Box(
@@ -1876,9 +1964,9 @@ private fun EventsListSection(events: List<ApiEvent>, selectedDate: LocalDate?, 
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(32.dp))
-            Text("Próximos eventos", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Text("Próximos eventos", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
         if (selectedDate != null) {
             val count = events.count { it.startDate?.toLocalDate() == selectedDate }
@@ -1913,20 +2001,20 @@ private fun EventListCard(event: ApiEvent, highlighted: Boolean, onClick: () -> 
     ) {
         Column(
             Modifier
-                .width(72.dp)
-                .height(76.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .width(52.dp)
+                .height(56.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(Color(0xFF2D2164)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(event.dayOfMonth, color = Color.White, fontWeight = FontWeight.Black, fontSize = 28.sp)
-            Text(event.monthShort, color = Purple, fontWeight = FontWeight.Black, fontSize = 15.sp)
+            Text(event.dayOfMonth, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text(event.monthShort, color = Purple, fontWeight = FontWeight.Black, fontSize = 11.sp)
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(event.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 23.sp, lineHeight = 27.sp)
-            Text(event.detailLine, color = Muted, fontSize = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("${event.currentPlayers ?: event.players?.size ?: 0}/${event.maxPlayers ?: 0} jugadores", color = Blue, fontSize = 17.sp, fontWeight = FontWeight.Black)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(event.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, lineHeight = 19.sp)
+            Text(event.detailLine, color = Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${event.currentPlayers ?: event.players?.size ?: 0}/${event.maxPlayers ?: 0} jugadores", color = Blue, fontSize = 12.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -2101,10 +2189,10 @@ private fun CommunityPostCard(post: ApiCommunityPost, onLike: () -> Unit, onAuth
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Avatar(post.avatarUrl, post.avatarColor, post.initials, 50.dp)
+            Avatar(post.avatarUrl, post.avatarColor, post.initials, 44.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(post.userName, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(post.userName, color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (post.userRole == "admin") {
                         Text(
                             "STAFF",
@@ -2121,7 +2209,7 @@ private fun CommunityPostCard(post: ApiCommunityPost, onLike: () -> Unit, onAuth
                 Text("@${post.userNick} · ${post.createdAt.relativeLabel()}", color = Muted, fontSize = 15.sp, maxLines = 1)
             }
         }
-        Text(post.content, color = Color.White, fontSize = 22.sp, lineHeight = 31.sp)
+        Text(post.content, color = Color.White, fontSize = 15.sp, lineHeight = 21.sp)
         post.imageUrl?.takeIf { it.isNotBlank() }?.let {
             AsyncImage(it, null, Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
         }
@@ -2143,13 +2231,13 @@ private fun CommunityHero() {
             .padding(22.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Icon(Icons.Default.Groups, null, tint = Purple, modifier = Modifier.size(72.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Default.Groups, null, tint = Purple, modifier = Modifier.size(24.dp))
             Text(
                 "Comunidad",
                 style = TextStyle(
                     brush = Brush.linearGradient(listOf(Blue, Purple)),
-                    fontSize = 44.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Black,
                 ),
             )
@@ -2157,9 +2245,9 @@ private fun CommunityHero() {
         Text(
             "Publica micro-posts, sigue a otros jugadores y mueve el meta de Última Tirada.",
             color = Muted,
-            fontSize = 23.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 31.sp,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 20.sp,
         )
     }
 }
@@ -2175,9 +2263,9 @@ private fun CommunitySection(title: String, icon: ImageVector, content: @Composa
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(34.dp))
-            Text(title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
         content()
     }
@@ -2215,15 +2303,15 @@ private fun CommunityRankingRow(position: Int, player: ApiRankingEntry, onClick:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("#$position", color = if (position <= 3) Gold else Purple, fontSize = 20.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(42.dp))
-        Avatar(player.avatarUrl, player.avatarColor, player.initial, 52.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("@${player.nick}", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${player.wins}V · ${player.losses}D · ${player.draws}E", color = Muted, fontSize = 16.sp)
+        Text("#$position", color = if (position <= 3) Gold else Purple, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(32.dp))
+        Avatar(player.avatarUrl, player.avatarColor, player.initial, 38.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("@${player.nick}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${player.wins}V · ${player.losses}D · ${player.draws}E", color = Muted, fontSize = 12.sp)
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text("${player.points}", color = Blue, fontSize = 29.sp, fontWeight = FontWeight.Black)
-            Text("PTS", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text("${player.points}", color = Blue, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Text("PTS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -2857,18 +2945,18 @@ private fun UserRankingSheet(user: ApiUser, state: UiState, vm: MainViewModel, o
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(rankPosition?.let { "#$it" } ?: "—", color = Gold, fontWeight = FontWeight.Black, fontSize = 42.sp)
-                        Text("Posición", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(rankPosition?.let { "#$it" } ?: "—", color = Gold, fontWeight = FontWeight.Black, fontSize = 28.sp)
+                        Text("Posición", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
-                    Box(Modifier.width(1.dp).height(60.dp).background(Border))
+                    Box(Modifier.width(1.dp).height(44.dp).background(Border))
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("$totalPlayers", color = Blue, fontWeight = FontWeight.Black, fontSize = 42.sp)
-                        Text("Jugadores", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("$totalPlayers", color = Blue, fontWeight = FontWeight.Black, fontSize = 28.sp)
+                        Text("Jugadores", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
-                    Box(Modifier.width(1.dp).height(60.dp).background(Border))
+                    Box(Modifier.width(1.dp).height(44.dp).background(Border))
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${user.points ?: 0}", color = Purple, fontWeight = FontWeight.Black, fontSize = 42.sp)
-                        Text("Puntos", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("${user.points ?: 0}", color = Purple, fontWeight = FontWeight.Black, fontSize = 28.sp)
+                        Text("Puntos", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -3083,23 +3171,23 @@ private fun SellDialog(vm: MainViewModel, onDismiss: () -> Unit) {
                     }
                 }
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(Icons.Default.Euro, null, tint = Color.White, modifier = Modifier.size(46.dp))
-                        Text("Vender Cartas", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Black)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.Euro, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        Text("Vender Cartas", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     }
                     Text(
                         "Envía tus cartas y recibe una valoración para tienda o efectivo.",
                         color = Color(0xFFB8B1CC),
-                        fontSize = 22.sp,
-                        lineHeight = 29.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
                 item {
                     SellSection {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Icon(Icons.Default.Inventory2, null, tint = Color.White, modifier = Modifier.size(34.dp))
-                            Text("¿Cuántas cartas quieres vender?", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Inventory2, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Text("¿Cuántas cartas quieres vender?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
                         }
                         SegmentedControl(listOf("1 carta", "Varias cartas"), mode) { mode = it }
                     }
@@ -3166,11 +3254,11 @@ private fun SellDialog(vm: MainViewModel, onDismiss: () -> Unit) {
                             SellTextField(phone, { phone = it }, "Teléfono de contacto", KeyboardType.Phone)
                         }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Día de cita", color = Color.White, fontSize = 21.sp, modifier = Modifier.weight(1f))
+                            Text("Día de cita", color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
                             Text(
                                 date.isoDateLabel(),
                                 color = Color.White,
-                                fontSize = 19.sp,
+                                fontSize = 14.sp,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(24.dp))
                                     .background(Color(0xFF302E3F))
@@ -3254,9 +3342,9 @@ private fun SellSection(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun SellSectionTitle(title: String, icon: ImageVector) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(32.dp))
-        Text(title, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Black)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -3367,9 +3455,9 @@ private fun SectionPanel(title: String, content: @Composable ColumnScope.() -> U
 
 @Composable
 private fun PageTitle(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 28.sp)
-        Text(subtitle, color = Muted)
+        Text(subtitle, color = Muted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -3377,7 +3465,7 @@ private fun PageTitle(title: String, subtitle: String) {
 private fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
     Box(
         modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 Brush.linearGradient(
                     listOf(CardColor, Active.copy(alpha = 0.42f)),
@@ -3385,21 +3473,21 @@ private fun StatCard(value: String, label: String, modifier: Modifier = Modifier
                     end = Offset(0f, Float.POSITIVE_INFINITY),
                 ),
             )
-            .border(1.dp, Border.copy(alpha = 0.45f), RoundedCornerShape(10.dp)),
+            .border(1.dp, Border.copy(alpha = 0.45f), RoundedCornerShape(8.dp)),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(2.dp)
-                .background(Color.White.copy(alpha = 0.07f)),
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.18f)),
         )
         Column(
-            Modifier.padding(vertical = 18.dp, horizontal = 8.dp).fillMaxWidth(),
+            Modifier.padding(vertical = 14.dp, horizontal = 8.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(value, color = Purple, fontWeight = FontWeight.Black, fontSize = 34.sp)
-            Spacer(Modifier.height(2.dp))
-            Text(label.uppercase(), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Text(label.uppercase(), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, maxLines = 1)
         }
     }
 }
