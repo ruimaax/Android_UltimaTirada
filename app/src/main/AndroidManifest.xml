@@ -7,8 +7,14 @@
         android:icon="@drawable/logosff"
         android:label="Última Tirada"
         android:roundIcon="@drawable/logosff"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <!-- AdMob Application ID — reemplaza con tu ID real de Android en AdMob -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-6875203286486237~5923777101" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">

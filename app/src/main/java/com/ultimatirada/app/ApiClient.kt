@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -13,14 +14,19 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.io.IOException
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-class ApiException(message: String) : Exception(message)
+class ApiException(message: String, val statusCode: Int? = null) : Exception(message)
 
 class ApiClient {
-    private val baseUrl = "https://ultimatirada.com"
+    private val baseUrls: List<String> = if (BuildConfig.DEBUG) {
+        listOf("http://10.0.2.2:8080", "http://127.0.0.1:8080", "https://ultimatirada.com")
+    } else {
+        listOf("https://ultimatirada.com")
+    }
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private var authToken: String? = null
 
@@ -150,6 +156,26 @@ class ApiClient {
     suspend fun fetchCardSaleAvailability(date: String): ApiCardSaleAvailability =
         get("/api/card-sales/appointments/availability?date=$date", ApiCardSaleAvailability.serializer())
 
+    suspend fun fetchAllyMe(): AllyMeResponse {
+        return try {
+            parseAllyMeResponse(getJson("/api/ally/me"))
+        } catch (error: ApiException) {
+            if (error.statusCode == 404) fetchAllyMeFallbackFromJoinedEvents() else throw error
+        }
+    }
+
+    private suspend fun fetchAllyMeFallbackFromJoinedEvents(): AllyMeResponse {
+        val joinedIds = runCatching {
+            getJson("/api/auth/me").jsonObject["joinedEvents"]?.let { element ->
+                element as? kotlinx.serialization.json.JsonArray
+            }?.mapNotNull { it.jsonPrimitive.content.toIntOrNull() }
+        }.getOrNull().orEmpty()
+        val joined = fetchEvents()
+            .filter { it.isJoined == true || joinedIds.contains(it.id) }
+            .map { AllyEvent(id = it.id.toString(), title = it.title, isJoined = true) }
+        return AllyMeResponse(events = joined)
+    }
+
     suspend fun submitSellRequest(
         cardName: String?,
         collection: String?,
@@ -235,6 +261,9 @@ class ApiClient {
         request(path, method, null, UnitSerializer)
     }
 
+    private suspend fun getJson(path: String): JsonElement =
+        requestRaw(path, "GET", null).let { json.parseToJsonElement(it) }
+
     private suspend fun <T> request(
         path: String,
         method: String,
@@ -242,6 +271,42 @@ class ApiClient {
         serializer: KSerializer<T>,
         authenticated: Boolean = true,
     ): T = withContext(Dispatchers.IO) {
+        val text = requestRaw(path, method, body, authenticated)
+        if (serializer == UnitSerializer) {
+            @Suppress("UNCHECKED_CAST")
+            Unit as T
+        } else {
+            json.decodeFromString(serializer, text)
+        }
+    }
+
+    private suspend fun requestRaw(
+        path: String,
+        method: String,
+        body: String?,
+        authenticated: Boolean = true,
+    ): String = withContext(Dispatchers.IO) {
+        var lastNetworkError: IOException? = null
+        baseUrls.forEachIndexed { index, baseUrl ->
+            try {
+                return@withContext requestRawOnce(baseUrl, path, method, body, authenticated)
+            } catch (error: IOException) {
+                lastNetworkError = error
+                if (index == baseUrls.lastIndex) {
+                    throw ApiException("No se pudo conectar al servidor")
+                }
+            }
+        }
+        throw ApiException(lastNetworkError?.localizedMessage ?: "No se pudo conectar al servidor")
+    }
+
+    private fun requestRawOnce(
+        baseUrl: String,
+        path: String,
+        method: String,
+        body: String?,
+        authenticated: Boolean,
+    ): String {
         val connection = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 20_000
@@ -267,15 +332,10 @@ class ApiClient {
             val message = runCatching {
                 json.parseToJsonElement(text).jsonObject["error"]?.jsonPrimitive?.content
             }.getOrNull()
-            throw ApiException(message ?: "Error del servidor ($status)")
+            throw ApiException(message ?: "Error del servidor ($status)", status)
         }
 
-        if (serializer == UnitSerializer) {
-            @Suppress("UNCHECKED_CAST")
-            Unit as T
-        } else {
-            json.decodeFromString(serializer, text)
-        }
+        return text
     }
 }
 

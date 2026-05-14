@@ -32,6 +32,7 @@ data class UiState(
     val isLoading: Boolean = false,
     val hasLoadedOnce: Boolean = false,
     val errorMessage: String? = null,
+    val ally: AllyUiState = AllyUiState(),
 ) {
     val isLoggedIn: Boolean get() = currentUser != null
     val featuredProducts: List<ApiProduct>
@@ -45,6 +46,12 @@ data class UiState(
     val statsEvents: Int get() = stats?.events ?: upcomingEvents.size
     val statsProducts: Int get() = stats?.products ?: products.size
 }
+
+data class AllyUiState(
+    val response: AllyMeResponse? = null,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("ultima_tirada", Context.MODE_PRIVATE)
@@ -87,7 +94,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         api.setToken(null)
         prefs.edit().remove(TOKEN_KEY).apply()
-        _uiState.update { it.copy(currentUser = null) }
+        _uiState.update { it.copy(currentUser = null, ally = AllyUiState()) }
     }
 
     fun loadAll() {
@@ -166,6 +173,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loadMatchHistory() = viewModelScope.launch {
         runCatching { api.fetchMatchHistory() }
             .onSuccess { history -> _uiState.update { it.copy(matchHistory = history) } }
+    }
+
+    fun refreshAlly() = viewModelScope.launch {
+        _uiState.update { it.copy(ally = it.ally.copy(isLoading = it.ally.response == null, errorMessage = null)) }
+        runCatching { api.fetchAllyMe() }
+            .onSuccess { response -> _uiState.update { it.copy(ally = AllyUiState(response = response)) } }
+            .onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        ally = it.ally.copy(
+                            isLoading = false,
+                            errorMessage = error.message ?: "No se pudo sincronizar Aliado",
+                        ),
+                    )
+                }
+            }
     }
 
     fun fetchPublicProfile(userId: Int, onResult: (ApiUser?) -> Unit) = viewModelScope.launch {
@@ -253,6 +276,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { api.fetchCardSaleAvailability(date) }
             .onSuccess { onResult(it) }
             .onFailure { onResult(null) }
+    }
+
+    fun checkoutCart(
+        cart: CartStore,
+        paymentMethod: String,
+        phone: String,
+        email: String,
+        note: String,
+        discountCode: String,
+        useChequetienda: Boolean,
+        onResult: (ApiCheckoutResponse?, String?) -> Unit,
+    ) = viewModelScope.launch {
+        val items = cart.items.value.map { CartCheckoutItem(it.product.id, it.quantity) }
+        runCatching {
+            api.checkoutCart(items, paymentMethod, phone, email, note, discountCode, useChequetienda)
+        }.onSuccess { response ->
+            cart.clear()
+            onResult(response, null)
+        }.onFailure { error ->
+            onResult(null, error.message ?: "No se pudo procesar el pedido")
+        }
+    }
+
+    fun validateDiscount(code: String, scope: String, onResult: (ApiDiscountResponse?, String?) -> Unit) = viewModelScope.launch {
+        runCatching { api.validateDiscount(code, scope) }
+            .onSuccess { onResult(it, null) }
+            .onFailure { onResult(null, it.message ?: "Código no válido") }
+    }
+
+    fun joinEventWithPayment(
+        event: ApiEvent,
+        paymentMethod: String,
+        phone: String,
+        email: String,
+        note: String,
+        discountCode: String,
+        useChequetienda: Boolean,
+        onResult: (String?) -> Unit,
+    ) = viewModelScope.launch {
+        runCatching {
+            api.joinEvent(event.id, paymentMethod, phone, email, note, discountCode, useChequetienda)
+        }.onSuccess {
+            onResult(null)
+            loadEvents()
+        }.onFailure { onResult(it.message ?: "No se pudo apuntarte") }
+    }
+
+    fun claimRewardedAdPoints(onResult: (Int?, String?) -> Unit) = viewModelScope.launch {
+        runCatching { api.claimRewardedAdPoints() }
+            .onSuccess { resp ->
+                onResult(resp.pointsAdded, null)
+                reloadProfile()
+            }
+            .onFailure { onResult(null, it.message ?: "No disponible por ahora") }
     }
 
     private suspend fun loadProductsInternal() = runCatching { api.fetchProducts() }

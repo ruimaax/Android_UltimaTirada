@@ -38,6 +38,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -136,8 +137,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import android.app.Activity
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
+import com.android.billingclient.api.AcknowledgePurchaseParams
+import com.android.billingclient.api.BillingClient
+import com.android.billingclient.api.BillingClientStateListener
+import com.android.billingclient.api.BillingFlowParams
+import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.ProductDetails
+import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.PendingPurchasesParams
+import com.android.billingclient.api.QueryPurchasesParams
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdLoader
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.FullScreenContentCallback
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.VideoOptions
+import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdOptions
+import com.google.android.gms.ads.nativead.NativeAdView
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -156,6 +189,15 @@ private val Muted = Color(0xFFB8BCE5)
 private val Blue = Color(0xFF4EA8FF)
 private val Purple = Color(0xFF9B6CFF)
 private val DeepPurple = Color(0xFF6E43C6)
+
+private object MonetizationConfig {
+    const val REMOVE_ADS_PRODUCT_ID = "ultima_tirada_remove_ads_lifetime_999"
+    const val ADS_REMOVED_KEY = "monetization.adsRemoved"
+    // Reemplaza con tus IDs reales de Android en AdMob
+    const val NATIVE_COMMUNITY_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110" // test
+    const val NATIVE_STORE_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110" // test
+    const val REWARDED_AD_UNIT_ID = "ca-app-pub-3940256099942544/5224354917" // test
+}
 private val Gold = Color(0xFFFFC857)
 
 class MainActivity : ComponentActivity() {
@@ -163,10 +205,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MobileAds.initialize(this)
         setContent {
             UltimaTiradaTheme {
                 val cart = remember { CartStore(this) }
-                UltimaTiradaApp(vm, cart)
+                val prefs = remember { getSharedPreferences("ultima_tirada", MODE_PRIVATE) }
+                val adsRemoved = remember { mutableStateOf(prefs.getBoolean(MonetizationConfig.ADS_REMOVED_KEY, false)) }
+                UltimaTiradaApp(vm, cart, adsRemoved.value) { adsRemoved.value = true; prefs.edit().putBoolean(MonetizationConfig.ADS_REMOVED_KEY, true).apply() }
             }
         }
     }
@@ -191,13 +236,14 @@ private enum class AppTab(val label: String) {
     Home("Inicio"),
     Store("Tienda"),
     Events("Eventos"),
+    Ally("Aliado"),
     Community("Comunidad"),
     Profile("Perfil"),
 }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore) {
+private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore, adsRemoved: Boolean, onAdsRemoved: () -> Unit) {
     val state by vm.uiState.collectAsState()
     val cartItems by cart.items.collectAsState()
     var splashDone by remember { mutableStateOf(false) }
@@ -243,11 +289,12 @@ private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore) {
                 ) { padding ->
                     Box(Modifier.padding(padding)) {
                         when (selectedTab) {
-                            AppTab.Home -> HomeScreen(state, onTab = { selectedTab = it }, vm = vm)
-                            AppTab.Store -> StoreScreen(state.products, state.isLoading, cart, vm)
+                            AppTab.Home -> HomeScreen(state, onTab = { selectedTab = it }, vm = vm, adsRemoved = adsRemoved)
+                            AppTab.Store -> StoreScreen(state.products, state.isLoading, cart, vm, adsRemoved = adsRemoved)
                             AppTab.Events -> EventsScreen(state, vm)
-                            AppTab.Community -> CommunityScreen(state, vm)
-                            AppTab.Profile -> ProfileScreen(state, vm)
+                            AppTab.Ally -> AllyMemberScreen(state, vm)
+                            AppTab.Community -> CommunityScreen(state, vm, adsRemoved = adsRemoved)
+                            AppTab.Profile -> ProfileScreen(state, vm, adsRemoved = adsRemoved, onAdsRemoved = onAdsRemoved)
                         }
                     }
                 }
@@ -256,7 +303,7 @@ private fun UltimaTiradaApp(vm: MainViewModel, cart: CartStore) {
     }
 
     if (showCart) {
-        CartDialog(cart = cart, onDismiss = { showCart = false })
+        CartDialog(cart = cart, vm = vm, onDismiss = { showCart = false })
     }
     val user = state.currentUser
     if (showProfileMenu && user != null) {
@@ -542,6 +589,7 @@ private fun AppBottomBar(selected: AppTab, onSelected: (AppTab) -> Unit) {
                         AppTab.Home -> Icons.Default.Home
                         AppTab.Store -> Icons.Default.Storefront
                         AppTab.Events -> Icons.Default.CalendarMonth
+                        AppTab.Ally -> Icons.Default.AutoAwesome
                         AppTab.Community -> Icons.Default.Groups
                         AppTab.Profile -> Icons.Default.Person
                     },
@@ -563,7 +611,7 @@ private fun AppBottomBar(selected: AppTab, onSelected: (AppTab) -> Unit) {
 }
 
 @Composable
-private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewModel) {
+private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewModel, adsRemoved: Boolean = false) {
     var detailEvent by remember { mutableStateOf<ApiEvent?>(null) }
     var selectedPublicUserId by remember { mutableStateOf<Int?>(null) }
 
@@ -606,6 +654,43 @@ private fun HomeScreen(state: UiState, onTab: (AppTab) -> Unit, vm: MainViewMode
                     }
                 }
             }
+        }
+        val recentPosts = state.communityPosts.take(3)
+        if (recentPosts.isNotEmpty()) {
+            item {
+                HomeSection(title = "Últimas actualizaciones", icon = { Icon(Icons.Default.ChatBubble, null, tint = Color.White, modifier = Modifier.size(16.dp)) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        recentPosts.forEach { post ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF0E0C1E)).padding(12.dp)
+                                    .clickable { onTab(AppTab.Community) },
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Avatar(post.avatarUrl, post.avatarColor, post.initials, 36.dp)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(post.userName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        if (post.userRole == "admin") {
+                                            Text("STAFF", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black,
+                                                modifier = Modifier.clip(RoundedCornerShape(50)).background(Gold).padding(horizontal = 5.dp, vertical = 1.dp))
+                                        }
+                                    }
+                                    Text(post.content, color = Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+                                }
+                                Text(post.createdAt.relativeLabel(), color = Muted, fontSize = 11.sp)
+                            }
+                        }
+                        TextButton(onClick = { onTab(AppTab.Community) }, modifier = Modifier.align(Alignment.End)) {
+                            Text("Ver todo →", color = Purple, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+        if (!adsRemoved) {
+            item { NativeAdCard(MonetizationConfig.NATIVE_COMMUNITY_AD_UNIT_ID) }
         }
     }
 
@@ -773,6 +858,8 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
     var event by remember(initialEvent.id) { mutableStateOf(initialEvent) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
     var selectedPlayerId by remember { mutableStateOf<Int?>(null) }
+    var showPaymentForm by remember { mutableStateOf(false) }
+    val requiresPayment = (event.requiresPayment ?: 0) > 0 && (event.price ?: 0.0) > 0.0
 
     LaunchedEffect(initialEvent.id) {
         while (true) {
@@ -831,6 +918,7 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         EventTag(event.format ?: "Evento", Purple)
                         EventTag(event.type?.replaceFirstChar { it.uppercase() } ?: "Torneo", Blue)
+                        if (requiresPayment) EventTag("%.2f€".format(event.price), Gold)
                     }
                 }
                 item {
@@ -848,10 +936,14 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
             }
             Button(
                 onClick = {
-                    vm.joinEvent(event) { message ->
-                        actionMessage = message ?: "Solicitud enviada."
-                        vm.fetchEventDetail(event.id) { updated ->
-                            if (updated != null) event = updated
+                    if (requiresPayment) {
+                        showPaymentForm = true
+                    } else {
+                        vm.joinEvent(event) { message ->
+                            actionMessage = message ?: "Solicitud enviada."
+                            vm.fetchEventDetail(event.id) { updated ->
+                                if (updated != null) event = updated
+                            }
                         }
                     }
                 },
@@ -882,6 +974,26 @@ private fun EventDetailDialog(initialEvent: ApiEvent, vm: MainViewModel, onDismi
             }
         }
     }
+
+    if (showPaymentForm) {
+        PaymentFormSheet(
+            title = "Inscripción al evento",
+            subtitle = "Completa tu inscripción a ${event.title}.",
+            summaryTitle = event.title,
+            summarySubtitle = "${event.format ?: "Evento"} · ${event.dayOfMonth} ${event.monthShort}",
+            subtotal = event.price ?: 0.0,
+            chequetiendaBalance = vm.uiState.value.currentUser?.chequetiendaBalance ?: 0.0,
+            onDismiss = { showPaymentForm = false },
+            onConfirm = { method, phone, email, note, discount, useCheque ->
+                vm.joinEventWithPayment(event, method, phone, email, note, discount, useCheque) { error ->
+                    showPaymentForm = false
+                    actionMessage = error ?: "¡Inscripción confirmada!"
+                    vm.fetchEventDetail(event.id) { updated -> if (updated != null) event = updated }
+                }
+            },
+        )
+    }
+
     selectedPlayerId?.let { id ->
         PublicProfileSheet(userId = id, vm = vm, onDismiss = { selectedPlayerId = null })
     }
@@ -1058,7 +1170,7 @@ private fun FeaturedProductsCarousel(products: List<ApiProduct>, onOpenStore: ()
 private fun FeaturedProductHomeCard(product: ApiProduct, onOpenStore: () -> Unit) {
     Column(
         Modifier
-            .fillParentMaxWidth()
+            .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xF20A0913))
             .border(1.dp, DeepPurple.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
@@ -1187,7 +1299,7 @@ private fun VideoArrow(icon: androidx.compose.ui.graphics.vector.ImageVector, on
 private fun YouTubeCard(title: String, thumbnail: String?, onClick: () -> Unit) {
     Box(
         Modifier
-            .fillParentMaxWidth()
+            .fillMaxWidth()
             .height(220.dp)
             .clip(RoundedCornerShape(8.dp))
             .border(1.dp, DeepPurple, RoundedCornerShape(8.dp))
@@ -1309,7 +1421,7 @@ private fun ScoreChip(text: String, color: Color) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StoreScreen(products: List<ApiProduct>, loading: Boolean, cart: CartStore, vm: MainViewModel) {
+private fun StoreScreen(products: List<ApiProduct>, loading: Boolean, cart: CartStore, vm: MainViewModel, adsRemoved: Boolean = false) {
     var search by remember { mutableStateOf("") }
     var showSell by remember { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<ApiProduct?>(null) }
@@ -1411,15 +1523,21 @@ private fun StoreScreen(products: List<ApiProduct>, loading: Boolean, cart: Cart
                     fontWeight = FontWeight.Black,
                 )
             }
-            items(filtered.chunked(2), key = { row -> row.joinToString("-") { it.id.toString() } }) { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    row.forEach { product ->
-                        Box(Modifier.weight(1f)) {
-                            ProductCard(product, onTap = { selectedProduct = product })
+            val chunked = filtered.chunked(2)
+            itemsIndexed(chunked, key = { _, row -> row.joinToString("-") { it.id.toString() } }) { index, row ->
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        row.forEach { product ->
+                            Box(Modifier.weight(1f)) {
+                                ProductCard(product, onTap = { selectedProduct = product })
+                            }
+                        }
+                        if (row.size == 1) {
+                            Spacer(Modifier.weight(1f))
                         }
                     }
-                    if (row.size == 1) {
-                        Spacer(Modifier.weight(1f))
+                    if (!adsRemoved && (index + 1) % 5 == 0) {
+                        NativeAdCard(MonetizationConfig.NATIVE_STORE_AD_UNIT_ID)
                     }
                 }
             }
@@ -2029,7 +2147,7 @@ private fun ApiEvent.eventColor(): Color {
 }
 
 @Composable
-private fun CommunityScreen(state: UiState, vm: MainViewModel) {
+private fun CommunityScreen(state: UiState, vm: MainViewModel, adsRemoved: Boolean = false) {
     var postText by remember { mutableStateOf("") }
     var searchText by remember { mutableStateOf("") }
     var feedType by remember { mutableStateOf(CommunityFeedType.ForYou) }
@@ -2122,13 +2240,22 @@ private fun CommunityScreen(state: UiState, vm: MainViewModel) {
                 feedType = CommunityFeedType.entries.first { it.label == label }
             }
         }
+        if (!adsRemoved) {
+            item { RewardedAdCard(vm) }
+        }
         item {
             CommunitySection(title = "Timeline", icon = Icons.Default.ChatBubble) {
                 if (filteredPosts.isEmpty()) {
                     EmptyHint(if (feedType == CommunityFeedType.Following) "Aún no hay posts de jugadores seguidos." else "No hay posts que coincidan con la búsqueda.")
                 } else {
-                    filteredPosts.forEach { post ->
+                    filteredPosts.forEachIndexed { index, post ->
                         CommunityPostCard(post, onLike = { vm.toggleLike(post) }, onAuthorTap = { selectedPublicUserId = post.userId })
+                        // Native ad every 10 posts
+                        if (!adsRemoved && (index + 1) % 10 == 0) {
+                            Spacer(Modifier.height(8.dp))
+                            NativeAdCard(MonetizationConfig.NATIVE_COMMUNITY_AD_UNIT_ID)
+                            Spacer(Modifier.height(8.dp))
+                        }
                     }
                 }
             }
@@ -2330,10 +2457,15 @@ private fun String.relativeLabel(): String = runCatching {
 }.getOrElse { take(10).isoDateLabel() }
 
 @Composable
-private fun ProfileScreen(state: UiState, vm: MainViewModel) {
+private fun ProfileScreen(state: UiState, vm: MainViewModel, adsRemoved: Boolean = false, onAdsRemoved: () -> Unit = {}) {
     val user = state.currentUser
+    var selectedTab by remember { mutableIntStateOf(0) }
+    val profileTabs = listOf("Ranking", "Eventos", "Historial")
 
-    LaunchedEffect(Unit) { vm.reloadProfile() }
+    LaunchedEffect(Unit) {
+        vm.reloadProfile()
+        vm.loadMatchHistory()
+    }
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { PageTitle("Perfil", "Tu cuenta y ranking") }
@@ -2347,6 +2479,93 @@ private fun ProfileScreen(state: UiState, vm: MainViewModel) {
                 item { ProfileMedalsSection(user.medals!!) }
             }
             item { ProfileInfoSection(user) }
+
+            // Tabs: Ranking / Eventos / Historial
+            item {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Color(0xFF1A1530)),
+                ) {
+                    profileTabs.forEachIndexed { index, label ->
+                        Box(
+                            Modifier.weight(1f).clip(RoundedCornerShape(28.dp))
+                                .background(if (selectedTab == index) DeepPurple else Color.Transparent)
+                                .clickable { selectedTab = index }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    }
+                }
+            }
+
+            when (selectedTab) {
+                0 -> {
+                    // Ranking tab
+                    val userRanking = state.sortedRanking.indexOfFirst { it.id == user.id }
+                    if (userRanking >= 0) {
+                        item {
+                            Column(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                    .background(Panel).padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Default.EmojiEvents, null, tint = Gold, modifier = Modifier.size(18.dp))
+                                    Text("Tu posición en el ranking", color = Color.White, fontWeight = FontWeight.Black)
+                                }
+                                Row(Modifier.fillMaxWidth()) {
+                                    ProfileStatPill("#${userRanking + 1}", "Posición", Gold, Modifier.weight(1f))
+                                    Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                                    ProfileStatPill("${user.points ?: 0}", "Puntos", Blue, Modifier.weight(1f))
+                                    Box(Modifier.width(1.dp).height(44.dp).background(Border))
+                                    ProfileStatPill("${user.wins ?: 0}/${user.losses ?: 0}/${user.draws ?: 0}", "V/D/E", Muted, Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                    val topRanking = state.sortedRanking.take(10)
+                    if (topRanking.isNotEmpty()) {
+                        item {
+                            Column(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                    .background(Panel).padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text("Top 10 jugadores", color = Color.White, fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 6.dp))
+                                topRanking.forEachIndexed { idx, player ->
+                                    RankingRow(idx + 1, player)
+                                    if (idx < topRanking.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(Border.copy(alpha = 0.3f)))
+                                }
+                            }
+                        }
+                    }
+                }
+                1 -> {
+                    // Eventos tab — reutiliza UserEventsSheet content inline
+                    val joined = state.events.filter { it.isJoined == true || it.paymentPending == true }
+                    if (joined.isEmpty()) {
+                        item { EmptyHint("No te has apuntado a ningún evento aún.") }
+                    } else {
+                        items(joined) { event -> UserEventRow(event) }
+                    }
+                }
+                2 -> {
+                    // Historial tab
+                    if (state.matchHistory.isEmpty()) {
+                        item { EmptyHint("Sin historial de partidas aún.") }
+                    } else {
+                        items(state.matchHistory) { match -> MatchHistoryRow(match) }
+                    }
+                }
+            }
+
+            // Monetización
+            if (!adsRemoved) {
+                item { RewardedAdCard(vm) }
+            }
+            item { RemoveAdsCard(adsRemoved = adsRemoved, onAdsRemoved = onAdsRemoved) }
+
             item {
                 Button(
                     onClick = { vm.logout() },
@@ -2511,6 +2730,30 @@ private fun ProfileInfoSection(user: ApiUser) {
             user.favoriteFormat?.let { fmt -> if (fmt.isNotBlank()) ProfileInfoRow(Icons.Default.Style, "Formato favorito", fmt.replaceFirstChar { it.uppercase() }) }
             user.location?.let { loc -> if (loc.isNotBlank()) ProfileInfoRow(Icons.Default.LocationOn, "Ubicación", loc) }
             ProfileInfoRow(Icons.Default.Email, "Email", user.email)
+            user.phone?.let { phone -> if (phone.isNotBlank()) ProfileInfoRow(Icons.Default.Info, "Teléfono", phone) }
+            user.chequetiendaBalance?.let { balance ->
+                if (balance > 0) ProfileInfoRow(Icons.Default.AccountBalanceWallet, "ChequeTienda", "%.2f€".format(balance))
+            }
+            user.socioTier?.let { tier ->
+                if (tier.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.Shield, null, tint = Gold, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text("Socio", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(tier.replaceFirstChar { it.uppercase() }, color = Gold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                user.socioStatus?.let { status ->
+                                    Text(
+                                        status.replaceFirstChar { it.uppercase() },
+                                        color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Black,
+                                        modifier = Modifier.clip(RoundedCornerShape(30.dp)).background(Gold).padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -3036,46 +3279,202 @@ private fun MatchHistoryRow(match: ApiMatchHistory) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CartDialog(cart: CartStore, onDismiss: () -> Unit) {
-    val context = LocalContext.current
+private fun CartDialog(cart: CartStore, vm: MainViewModel, onDismiss: () -> Unit) {
     val items by cart.items.collectAsState()
-    AlertDialog(
+    var showCheckout by remember { mutableStateOf(false) }
+    var checkoutResult by remember { mutableStateOf<ApiCheckoutResponse?>(null) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Carrito", modifier = Modifier.weight(1f))
-                IconButton(onDismiss) { Icon(Icons.Default.Close, null) }
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (items.isEmpty()) EmptyHint("Tu carrito está vacío.")
-                items.forEach { item ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(item.product.name, color = Color.White, fontWeight = FontWeight.Bold)
-                            Text("x${item.quantity} · %.2f€".format(item.lineTotal), color = Muted)
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xFF070711)),
+        ) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BadgedBox(badge = { if (items.isNotEmpty()) Badge { Text("${items.sumOf { it.quantity }}") } }) {
+                        Icon(Icons.Default.ShoppingCart, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text("Carrito", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                    if (items.isNotEmpty()) {
+                        TextButton(onClick = { showClearConfirm = true }) {
+                            Text("Vaciar", color = Color(0xFFFF8A80), fontWeight = FontWeight.Bold)
                         }
-                        TextButton({ cart.updateQuantity(item.product.id, item.quantity - 1) }) { Text("-") }
-                        TextButton({ cart.updateQuantity(item.product.id, item.quantity + 1) }) { Text("+") }
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(30.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF211B3F), contentColor = Purple),
+                    ) { Text("Cerrar", fontSize = 16.sp) }
+                }
+
+                if (checkoutResult != null) {
+                    val result = checkoutResult!!
+                    LazyColumn(
+                        Modifier.weight(1f),
+                        contentPadding = PaddingValues(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        item {
+                            Column(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF0D1A0A)).border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                    .padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Icon(Icons.Default.Verified, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(52.dp))
+                                Text("¡Pedido confirmado!", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                                result.orderCode?.let { code ->
+                                    Text("Código: $code", color = Gold, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                }
+                                result.magicPhrase?.let { phrase ->
+                                    Column(
+                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFF241C40)).padding(14.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text("Tu frase mágica", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("\"$phrase\"", color = Purple, fontSize = 16.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                                    }
+                                }
+                                result.total?.let { total ->
+                                    Text("Total: %.2f€".format(total), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text(
+                                    "Nos pondremos en contacto contigo para coordinar la recogida.",
+                                    color = Muted, fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp,
+                                )
+                                Button(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(30.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                                ) { Text("Cerrar", fontWeight = FontWeight.Black, fontSize = 16.sp) }
+                            }
+                        }
+                    }
+                } else if (items.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(Icons.Default.ShoppingCart, null, tint = Muted, modifier = Modifier.size(64.dp))
+                            Text("Tu carrito está vacío", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                            Text("Añade productos desde la tienda.", color = Muted, textAlign = TextAlign.Center)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(items, key = { it.id }) { item ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                    .background(Panel).padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                ProductImage(item.product.image, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.product.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text("%.2f€/ud".format(item.product.price), color = Muted, fontSize = 12.sp)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFF211B3F)).clickable { cart.updateQuantity(item.id, item.quantity - 1) }, contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Remove, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    }
+                                    Text("${item.quantity}", color = Color.White, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 10.dp))
+                                    Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFF211B3F)).clickable { cart.updateQuantity(item.id, item.quantity + 1) }, contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFF3A1B24)).clickable { cart.remove(item.id) }, contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Close, null, tint = Color(0xFFFF8A80), modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF211B3F)).padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Subtotal", color = Muted, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(cart.subtotalFormatted, color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().background(Color(0xF5070711))
+                            .navigationBarsPadding().padding(horizontal = 18.dp, vertical = 14.dp),
+                    ) {
+                        Button(
+                            onClick = { showCheckout = true },
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            shape = RoundedCornerShape(34.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                        ) {
+                            Icon(Icons.Default.AccountBalanceWallet, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Realizar pedido · ${cart.subtotalFormatted}", fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        }
                     }
                 }
-                Text("TOTAL: ${cart.subtotalFormatted}", color = Gold, fontWeight = FontWeight.Black)
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    context.startActivity(cart.emailIntent())
-                    onDismiss()
-                },
-                enabled = items.isNotEmpty(),
-            ) { Text("Reservar por email") }
-        },
-        dismissButton = { TextButton(onDismiss) { Text("Cerrar") } },
-        containerColor = Panel,
-    )
+        }
+    }
+
+    if (showCheckout) {
+        PaymentFormSheet(
+            title = "Confirmar pedido",
+            subtitle = "Revisa tu pedido y elige cómo pagar.",
+            summaryTitle = "${items.sumOf { it.quantity }} producto(s)",
+            summarySubtitle = "${items.size} artículo(s) en tu carrito",
+            subtotal = cart.subtotal,
+            chequetiendaBalance = vm.uiState.value.currentUser?.chequetiendaBalance ?: 0.0,
+            onDismiss = { showCheckout = false },
+            onConfirm = { method, phone, email, note, discount, useCheque ->
+                vm.checkoutCart(cart, method, phone, email, note, discount, useCheque) { result, error ->
+                    if (error != null) {
+                        // error handled inside PaymentFormSheet via callback
+                    } else {
+                        checkoutResult = result
+                    }
+                    showCheckout = false
+                }
+            },
+        )
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("¿Vaciar el carrito?") },
+            text = { Text("Se eliminarán todos los productos.", color = Muted) },
+            confirmButton = {
+                Button(
+                    onClick = { cart.clear(); showClearConfirm = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B1A2F)),
+                ) { Text("Vaciar") }
+            },
+            dismissButton = { TextButton({ showClearConfirm = false }) { Text("Cancelar") } },
+            containerColor = Panel,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -3530,3 +3929,453 @@ private fun String.toColorOrNull(): Color? = runCatching {
     val clean = removePrefix("#")
     Color(android.graphics.Color.parseColor("#$clean"))
 }.getOrNull()
+
+// ─── PAYMENT FORM SHEET ────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun PaymentFormSheet(
+    title: String,
+    subtitle: String,
+    summaryTitle: String,
+    summarySubtitle: String,
+    subtotal: Double,
+    chequetiendaBalance: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (method: String, phone: String, email: String, note: String, discount: String, useCheque: Boolean) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var method by remember { mutableStateOf("bizum") }
+    var phone by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var discountCode by remember { mutableStateOf("") }
+    var useChequetienda by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val canConfirm = !sending && (phone.isNotBlank() || email.isNotBlank())
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = Color(0xFF090913),
+        dragHandle = {
+            Box(Modifier.padding(top = 10.dp).size(width = 56.dp, height = 6.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF777684)))
+        },
+    ) {
+        LazyColumn(
+            Modifier.fillMaxWidth().padding(horizontal = 22.dp),
+            contentPadding = PaddingValues(bottom = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(subtitle, color = Muted, fontSize = 14.sp, lineHeight = 20.sp)
+                }
+            }
+            item {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF15132A)).border(1.dp, Border.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text(summaryTitle, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(summarySubtitle, color = Muted, fontSize = 12.sp)
+                        }
+                        Text("%.2f€".format(subtotal), color = Purple, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    }
+                    if (chequetiendaBalance > 0) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1A1530)).padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(Icons.Default.AccountBalanceWallet, null, tint = Gold, modifier = Modifier.size(18.dp))
+                            Text("Usar ChequeTienda (%.2f€ disponibles)".format(chequetiendaBalance), color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            androidx.compose.material3.Switch(
+                                checked = useChequetienda,
+                                onCheckedChange = { useChequetienda = it },
+                                colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = Gold, checkedTrackColor = Gold.copy(alpha = 0.4f)),
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF15132A)).border(1.dp, Border.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Text("Método de pago", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Color(0xFF343240)),
+                    ) {
+                        listOf("bizum" to "Bizum", "cash" to "Efectivo").forEach { (value, label) ->
+                            Box(
+                                Modifier.weight(1f).clip(RoundedCornerShape(28.dp))
+                                    .background(if (method == value) DeepPurple else Color.Transparent)
+                                    .clickable { method = value }.padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    Text(
+                        if (method == "cash") "Pago en efectivo: nos pondremos en contacto para coordinar la recogida."
+                        else "Pago por Bizum: rápido y sin comisiones. Te contactaremos para coordinar.",
+                        color = Muted, fontSize = 12.sp, lineHeight = 18.sp,
+                    )
+                    OutlinedTextField(
+                        discountCode, { discountCode = it.uppercase() },
+                        label = { Text("Código de descuento (opcional)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        colors = loginFieldColors(), shape = RoundedCornerShape(10.dp),
+                        keyboardOptions = KeyboardOptions(autoCorrect = false),
+                    )
+                    OutlinedTextField(
+                        phone, { phone = it },
+                        label = { Text("Teléfono (WhatsApp)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        colors = loginFieldColors(), shape = RoundedCornerShape(10.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    )
+                    OutlinedTextField(
+                        email, { email = it },
+                        label = { Text("Correo electrónico") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        colors = loginFieldColors(), shape = RoundedCornerShape(10.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    )
+                    OutlinedTextField(
+                        note, { note = it },
+                        label = { Text("Nota adicional (opcional)") },
+                        modifier = Modifier.fillMaxWidth().height(88.dp),
+                        colors = loginFieldColors(), shape = RoundedCornerShape(10.dp),
+                        maxLines = 3,
+                    )
+                }
+            }
+            errorMessage?.let { err ->
+                item { Text(err, color = Color(0xFFFF8A80), fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+            }
+            item {
+                Button(
+                    onClick = {
+                        errorMessage = null
+                        sending = true
+                        onConfirm(method, phone, email, note, discountCode, useChequetienda)
+                    },
+                    enabled = canConfirm,
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(34.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                ) {
+                    if (sending) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    else {
+                        Icon(Icons.Default.Verified, null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Confirmar pedido", fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── NATIVE AD CARD ────────────────────────────────────────────────────────────
+
+@Composable
+private fun NativeAdCard(adUnitId: String) {
+    val context = LocalContext.current
+    var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
+
+    DisposableEffect(adUnitId) {
+        val loader = AdLoader.Builder(context, adUnitId)
+            .forNativeAd { ad -> nativeAd = ad }
+            .withAdListener(object : AdListener() {
+                override fun onAdFailedToLoad(error: LoadAdError) { nativeAd = null }
+            })
+            .withNativeAdOptions(NativeAdOptions.Builder().setVideoOptions(VideoOptions.Builder().setStartMuted(true).build()).build())
+            .build()
+        loader.loadAd(AdRequest.Builder().build())
+        onDispose { nativeAd?.destroy() }
+    }
+
+    nativeAd?.let { ad ->
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF0D0B1C)).border(1.dp, Border.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    val adView = NativeAdView(ctx)
+                    val layout = FrameLayout(ctx).apply {
+                        setPadding(32, 28, 32, 28)
+                    }
+                    val headline = TextView(ctx).apply {
+                        setTextColor(android.graphics.Color.WHITE)
+                        textSize = 15f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        text = ad.headline ?: "Publicidad"
+                    }
+                    val body = TextView(ctx).apply {
+                        setTextColor(android.graphics.Color.parseColor("#B8BCE5"))
+                        textSize = 12f
+                        text = ad.body ?: ""
+                    }
+                    val adLabel = TextView(ctx).apply {
+                        text = "Anuncio"
+                        textSize = 10f
+                        setTextColor(android.graphics.Color.parseColor("#9B6CFF"))
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            setColor(android.graphics.Color.parseColor("#1A1530"))
+                            cornerRadius = 20f
+                        }
+                        setPadding(16, 4, 16, 4)
+                    }
+                    val innerLayout = android.widget.LinearLayout(ctx).apply {
+                        orientation = android.widget.LinearLayout.VERTICAL
+                        val p8 = (8 * ctx.resources.displayMetrics.density).toInt()
+                        addView(adLabel)
+                        addView(headline)
+                        addView(body)
+                        for (i in 0 until childCount) getChildAt(i).let {
+                            (it.layoutParams as? android.widget.LinearLayout.LayoutParams)?.apply { topMargin = p8 }
+                        }
+                    }
+                    layout.addView(innerLayout)
+                    adView.headlineView = headline
+                    adView.bodyView = body
+                    adView.addView(layout)
+                    adView.setNativeAd(ad)
+                    adView
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+// ─── REWARDED AD CARD ──────────────────────────────────────────────────────────
+
+@Composable
+private fun RewardedAdCard(vm: MainViewModel) {
+    val context = LocalContext.current
+    var loading by remember { mutableStateOf(false) }
+    var resultMessage by remember { mutableStateOf<String?>(null) }
+    var rewardedAd by remember { mutableStateOf<RewardedAd?>(null) }
+    val scope = rememberCoroutineScope()
+
+    DisposableEffect(Unit) {
+        RewardedAd.load(
+            context,
+            MonetizationConfig.REWARDED_AD_UNIT_ID,
+            AdRequest.Builder().build(),
+            object : RewardedAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedAd) { rewardedAd = ad }
+                override fun onAdFailedToLoad(error: LoadAdError) { rewardedAd = null }
+            },
+        )
+        onDispose { rewardedAd = null }
+    }
+
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF1A1040), Color(0xFF0D0820), Color(0xFF1A1040))))
+            .border(1.dp, Purple.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .padding(18.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(38.dp).clip(CircleShape).background(Purple.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.PlayCircle, null, tint = Purple, modifier = Modifier.size(22.dp))
+                }
+                Column {
+                    Text("Ver anuncio para ganar puntos", color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    Text("Mira un breve vídeo y suma puntos a tu ranking.", color = Muted, fontSize = 12.sp)
+                }
+            }
+            resultMessage?.let { msg ->
+                Text(msg, color = if (msg.startsWith("¡")) Gold else Color(0xFFFF8A80), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            Button(
+                onClick = {
+                    val activity = context as? Activity ?: return@Button
+                    val ad = rewardedAd
+                    if (ad != null) {
+                        loading = true
+                        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                            override fun onAdDismissedFullScreenContent() {
+                                loading = false
+                                rewardedAd = null
+                            }
+                        }
+                        ad.show(activity) {
+                            vm.claimRewardedAdPoints { points, error ->
+                                loading = false
+                                resultMessage = if (error != null) error
+                                else "¡+${points ?: 0} puntos ganados!"
+                            }
+                        }
+                    } else {
+                        resultMessage = "Anuncio no disponible. Inténtalo más tarde."
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(30.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DeepPurple),
+            ) {
+                if (loading) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                else {
+                    Icon(Icons.Default.Star, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Ver anuncio", fontWeight = FontWeight.Black)
+                }
+            }
+        }
+    }
+}
+
+// ─── REMOVE ADS CARD ───────────────────────────────────────────────────────────
+
+@Composable
+private fun RemoveAdsCard(adsRemoved: Boolean, onAdsRemoved: () -> Unit) {
+    val context = LocalContext.current
+    var billingClient by remember { mutableStateOf<BillingClient?>(null) }
+    var productDetails by remember { mutableStateOf<ProductDetails?>(null) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        // clientHolder permite referenciar el cliente dentro del listener
+        // antes de que la variable 'client' esté completamente asignada
+        var clientHolder: BillingClient? = null
+        val client = BillingClient.newBuilder(context)
+            .setListener { result, purchases ->
+                if (result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
+                    purchases.forEach { purchase ->
+                        if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
+                            purchase.products.contains(MonetizationConfig.REMOVE_ADS_PRODUCT_ID)
+                        ) {
+                            if (!purchase.isAcknowledged) {
+                                val ackParams = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.purchaseToken).build()
+                                clientHolder?.acknowledgePurchase(ackParams) {}
+                            }
+                            onAdsRemoved()
+                        }
+                    }
+                }
+            }
+            .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
+            .build()
+        clientHolder = client
+        client.startConnection(object : BillingClientStateListener {
+            override fun onBillingSetupFinished(result: BillingResult) {
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    val params = QueryProductDetailsParams.newBuilder()
+                        .setProductList(listOf(
+                            QueryProductDetailsParams.Product.newBuilder()
+                                .setProductId(MonetizationConfig.REMOVE_ADS_PRODUCT_ID)
+                                .setProductType(BillingClient.ProductType.INAPP)
+                                .build(),
+                        ))
+                        .build()
+                    client.queryProductDetailsAsync(params) { _, details ->
+                        productDetails = details.firstOrNull()
+                    }
+                    client.queryPurchasesAsync(
+                        QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build(),
+                    ) { _, purchases ->
+                        if (purchases.any { it.products.contains(MonetizationConfig.REMOVE_ADS_PRODUCT_ID) && it.purchaseState == Purchase.PurchaseState.PURCHASED }) {
+                            onAdsRemoved()
+                        }
+                    }
+                }
+            }
+            override fun onBillingServiceDisconnected() {}
+        })
+        billingClient = client
+        onDispose { client.endConnection() }
+    }
+
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(if (adsRemoved) Brush.linearGradient(listOf(Color(0xFF0D1A0A), Color(0xFF0D1A0A))) else Brush.linearGradient(listOf(Color(0xFF101030), Color(0xFF0A0A18))))
+            .border(1.dp, if (adsRemoved) Color(0xFF4CAF50).copy(alpha = 0.5f) else Blue.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+            .padding(18.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(42.dp).clip(CircleShape)
+                        .background(if (adsRemoved) Color(0xFF4CAF50).copy(alpha = 0.2f) else Blue.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (adsRemoved) Icons.Default.Verified else Icons.Default.Shield,
+                        null,
+                        tint = if (adsRemoved) Color(0xFF4CAF50) else Blue,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (adsRemoved) "Anuncios eliminados" else "Quitar anuncios",
+                        color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp,
+                    )
+                    Text(
+                        if (adsRemoved) "Gracias por apoyar Última Tirada." else (productDetails?.oneTimePurchaseOfferDetails?.formattedPrice?.let { "Pago único de $it. Sin suscripción." } ?: "Pago único · Sin suscripción."),
+                        color = Muted, fontSize = 12.sp,
+                    )
+                }
+            }
+            statusMessage?.let { msg -> Text(msg, color = Color(0xFFFF8A80), fontSize = 12.sp) }
+            if (!adsRemoved) {
+                Button(
+                    onClick = {
+                        val activity = context as? Activity ?: return@Button
+                        val details = productDetails ?: return@Button
+                        loading = true
+                        val flowParams = BillingFlowParams.newBuilder()
+                            .setProductDetailsParamsList(listOf(
+                                BillingFlowParams.ProductDetailsParams.newBuilder()
+                                    .setProductDetails(details)
+                                    .build(),
+                            ))
+                            .build()
+                        val result = billingClient?.launchBillingFlow(activity, flowParams)
+                        if (result?.responseCode != BillingClient.BillingResponseCode.OK) {
+                            loading = false
+                            statusMessage = "No se pudo iniciar la compra."
+                        }
+                    },
+                    enabled = !loading && productDetails != null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(30.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Blue),
+                ) {
+                    if (loading) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    else {
+                        Icon(Icons.Default.Shield, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Comprar sin anuncios", fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+    }
+}
